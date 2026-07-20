@@ -1,93 +1,50 @@
-* {
-    box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    margin: 0;
-    padding: 15px;
-    background-color: #f4f7f6;
-    color: #333;
+    margin: 0; padding: 0; background-color: #f4f7f6; color: #333; padding-top: 60px; 
 }
 
-header {
-    text-align: center;
-    margin-bottom: 20px;
+/* Nav */
+.app-nav {
+    position: fixed; top: 0; left: 0; right: 0; background: #2c3e50; display: flex; 
+    justify-content: space-around; padding: 10px 0; z-index: 2000; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
 }
+.nav-btn { background: none; border: none; color: #95a5a6; font-size: 1rem; font-weight: bold; padding: 10px 20px; cursor: pointer; }
+.nav-btn.active { color: #fff; border-bottom: 3px solid #27ae60; }
+.view-section { display: none; padding: 15px; }
+.view-section.active { display: block; }
 
-.hole-navigation {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #fff;
-    padding: 10px;
-    border-radius: 10px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
+/* Components */
+header { margin-bottom: 15px; }
+.hole-navigation { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 10px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.hole-navigation button { background: none; border: none; color: #27ae60; font-size: 1rem; font-weight: bold; padding: 10px; cursor: pointer;}
+.card { background: #fff; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
 
-.hole-navigation button {
-    background: none;
-    border: none;
-    color: #27ae60;
-    font-size: 1rem;
-    font-weight: bold;
-}
+/* Map & GPS */
+#map { z-index: 1; } /* Keeps Leaflet under the nav bar */
+.plays-like-box { background: #fff3e0; border: 1px solid #f39c12; padding: 15px; border-radius: 10px; margin-top: 10px; }
+.gps-display { text-align: center; }
+.yardage { margin: 10px 0; }
+#distance-number { font-size: 4rem; font-weight: bold; color: #2c3e50; }
+.unit { font-size: 1.5rem; color: #7f8c8d; }
+.caddy-recommendation { margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; color: #27ae60; }
 
-.gps-display {
-    background: #fff;
-    padding: 30px 20px;
-    border-radius: 15px;
-    text-align: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-}
+/* Buttons */
+.pin-controls, .add-club-row { display: flex; gap: 10px; margin-top: 10px; }
+.action-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: bold; color: white; cursor: pointer; text-align: center;}
+.blue-btn { background-color: #3498db; } .gray-btn { background-color: #95a5a6; } .red-btn { background-color: #e74c3c; }
+.primary-btn { background: #27ae60; color: white; border: none; padding: 15px; width: 100%; font-size: 1.2rem; border-radius: 8px; font-weight: bold; margin-bottom: 15px; cursor: pointer; }
+select, input[type="text"], input[type="number"] { width: 100%; padding: 12px; font-size: 1rem; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
 
-.yardage {
-    margin: 10px 0;
-}
+/* Scorecard & History */
+.score-grid { display: flex; gap: 10px; text-align: center; }
+.score-grid div { flex: 1; }
+.score-grid input[type="number"] { font-size: 1.5rem; text-align: center; font-weight: bold; }
+.history-round-card { border-bottom: 1px solid #eee; padding: 15px 0; display: flex; justify-content: space-between; align-items: center; }
+.history-date { font-weight: bold; color: #2c3e50; }
+.history-points { font-size: 1.2rem; font-weight: bold; color: #3498db; }
 
-#distance-number {
-    font-size: 5rem;
-    font-weight: bold;
-    color: #2c3e50;
-}
-
-.unit {
-    font-size: 1.5rem;
-    color: #7f8c8d;
-}
-
-.caddy-recommendation {
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px solid #eee;
-    color: #27ae60;
-}
-
-.shot-tracker {
-    background: #fff;
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-}
-
-.primary-btn {
-    background: #27ae60;
-    color: white;
-    border: none;
-    padding: 15px;
-    width: 100%;
-    font-size: 1.2rem;
-    border-radius: 8px;
-    font-weight: bold;
-    margin-bottom: 15px;
-}
-
-select {
-    width: 100%;
-    padding: 12px;
-    font-size: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background: #f9f9f9;
-}
+/* Bag */
+.club-tag { background: #ecf0f1; padding: 5px 12px; border-radius: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 5px; }
+.remove-club { color: #e74c3c; font-weight: bold; cursor: pointer; border: none; background: none; padding: 0;}

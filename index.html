@@ -2,71 +2,175 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- This meta tag is critical for mobile web apps to prevent unwanted zooming -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Castle Dargan Caddy</title>
+    
+    <!-- PWA Manifest & App Config -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2c3e50">
+    <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Golf_flag.svg/512px-Golf_flag.svg.png">
+
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 
-    <!-- Header Section -->
-    <header>
-        <h1>Castle Dargan</h1>
-        <div class="hole-navigation">
-            <button id="prev-hole">&lt; Prev</button>
-            <h2 id="current-hole">Hole 1</h2>
-            <button id="next-hole">Next &gt;</button>
-        </div>
-    </header>
+    <nav class="app-nav">
+        <button class="nav-btn active" id="tab-play">Play</button>
+        <button class="nav-btn" id="tab-history">History</button>
+        <button class="nav-btn" id="tab-settings">Settings</button>
+    </nav>
 
-    <!-- Main GPS Display -->
-    <main>
-        <section class="gps-display">
-            <p>Distance to Center</p>
-            <div class="yardage">
-                <!-- JavaScript will inject the live number here -->
-                <span id="distance-number">--</span>
-                <span class="unit">Yds</span>
+    <!-- ========================================== -->
+    <!-- VIEW: PLAY -->
+    <!-- ========================================== -->
+    <main id="view-play" class="view-section active">
+        <header>
+            <div class="hole-navigation">
+                <button id="prev-hole">&lt; Prev</button>
+                <div style="text-align: center;">
+                    <h2 id="current-hole" style="margin: 0;">Hole 1</h2>
+                    <span id="hole-par-display" style="color: #27ae60; font-weight: bold; font-size: 0.9rem;">Par 4 | SI 8</span>
+                </div>
+                <button id="next-hole">Next &gt;</button>
             </div>
+        </header>
+
+        <div id="map" class="card" style="height: 250px; padding: 0; overflow: hidden; border-radius: 15px;"></div>
+
+        <section class="gps-display card">
+            <p style="margin-top: 0; color: #7f8c8d; font-weight: bold; text-transform: uppercase; font-size: 0.8rem;">Actual Distance</p>
+            <div class="yardage" style="margin-top: -10px;"><span id="distance-number">--</span><span class="unit">Yds</span></div>
             
+            <div class="plays-like-box">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.9rem; color: #555;">Wind: <strong id="wind-speed-display">-- mph</strong> <span id="wind-dir-icon"></span></span>
+                    <button id="refresh-weather-btn" style="background: none; border: none; color: #3498db; cursor: pointer;">↻ Refresh</button>
+                </div>
+                <h3 style="margin: 10px 0 0 0; color: #e67e22; font-size: 1.5rem;">Plays Like: <span id="plays-like-number">--</span> Yds</h3>
+            </div>
+
             <div class="caddy-recommendation">
-                <p>Caddy Says: <strong id="recommended-club">Calculating...</strong></p>
+                <p>Caddy: <strong id="recommended-club">Calculating...</strong></p>
+            </div>
+            <div class="pin-controls">
+                <button id="update-pin-btn" class="action-btn blue-btn">Set Pin</button>
+                <button id="reset-pin-btn" class="action-btn gray-btn">Reset</button>
             </div>
         </section>
 
-        <!-- Shot Tracking Controls -->
-        <section class="shot-tracker">
+        <section class="shot-tracker card">
             <h3>Track Your Shot</h3>
-            
             <div class="tracker-controls">
                 <button id="track-btn" class="primary-btn">Start Shot</button>
-                
-                <div class="club-selection">
-                    <label for="club-select">Club Used:</label>
-                    <select id="club-select">
-                        <option value="">Select a club...</option>
-                        <option value="Driver">Driver</option>
-                        <option value="3 Wood">3 Wood</option>
-                        <option value="5 Wood">5 Wood</option>
-                        <option value="4 Iron">4 Iron</option>
-                        <option value="5 Iron">5 Iron</option>
-                        <option value="6 Iron">6 Iron</option>
-                        <option value="7 Iron">7 Iron</option>
-                        <option value="8 Iron">8 Iron</option>
-                        <option value="9 Iron">9 Iron</option>
-                        <option value="PW">Pitching Wedge</option>
-                        <option value="GW">Gap Wedge</option>
-                        <option value="SW">Sand Wedge</option>
+                <div id="shot-review-area" style="display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+                    <p style="text-align: center; font-size: 1.2rem; margin-top: 0;">Distance: <strong id="pending-distance">0</strong> Yds</p>
+                    <label>Club:</label><select id="club-select" style="margin-bottom: 10px;"></select>
+                    <label>Accuracy:</label>
+                    <select id="accuracy-select">
+                        <option value="Fairway">Fairway / Target</option>
+                        <option value="Left Rough">Left Rough</option>
+                        <option value="Right Rough">Right Rough</option>
+                        <option value="Hazard">Hazard/OB</option>
+                        <option value="Green">On the Green</option>
                     </select>
+                    <div class="pin-controls" style="margin-top: 15px;">
+                        <button id="save-shot-btn" class="action-btn blue-btn">Save</button>
+                        <button id="ignore-shot-btn" class="action-btn red-btn">Ignore</button>
+                    </div>
                 </div>
             </div>
-            
-            <!-- Hidden by default, shown when a shot is completed -->
-            <p id="shot-result" style="display: none;">Shot recorded: <span id="last-shot-distance">0</span> Yds</p>
+        </section>
+
+        <section class="scorecard card">
+            <h3>Score - Hole <span id="scorecard-hole-num">1</span></h3>
+            <div class="score-grid">
+                <div><label>Strokes</label><input type="number" id="hole-strokes" min="1" max="15"></div>
+                <div><label>Putts</label><input type="number" id="hole-putts" min="0" max="10"></div>
+                <div style="display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                    <label>GIR</label><input type="checkbox" id="hole-gir" style="width: 25px; height: 25px;">
+                </div>
+            </div>
+            <p style="text-align: center; font-weight: bold; color: #3498db; margin: 10px 0 0 0;">Points: <span id="hole-points-display">0</span></p>
+            <button id="save-score-btn" class="primary-btn" style="margin-top: 15px; background-color: #2c3e50;">Save Score</button>
+        </section>
+
+        <!-- RESTORED ANALYTICS CARD -->
+        <section class="analytics card">
+            <h3>My Analytics (This Round)</h3>
+            <div class="stats-grid">
+                <div class="stat-box"><span>Score To Par</span><strong id="stat-score">E</strong></div>
+                <div class="stat-box"><span>Total Pts</span><strong id="stat-points" style="color: #3498db;">0</strong></div>
+                <div class="stat-box"><span>Fairways</span><strong id="stat-fir">0%</strong></div>
+                <div class="stat-box"><span>GIR</span><strong id="stat-gir">0%</strong></div>
+            </div>
+        </section>
+
+        <button id="end-round-btn" class="primary-btn" style="background-color: #e67e22; margin-bottom: 30px;">End Round & Save</button>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- VIEW: HISTORY -->
+    <!-- ========================================== -->
+    <main id="view-history" class="view-section">
+        <section class="card">
+            <h3>Scoring Trends</h3>
+            <canvas id="historyChart" width="400" height="250"></canvas>
+        </section>
+        <section class="card">
+            <h3>Past Rounds</h3>
+            <div id="past-rounds-list"></div>
         </section>
     </main>
 
-    <!-- Link to your logic -->
+    <!-- ========================================== -->
+    <!-- VIEW: SETTINGS -->
+    <!-- ========================================== -->
+    <main id="view-settings" class="view-section">
+        <section class="settings card">
+            <h3>Player Profile</h3>
+            <div class="setting-group">
+                <label>Playing Handicap:</label>
+                <input type="number" id="playing-handicap" value="18" min="0" max="54">
+            </div>
+            <div class="setting-group">
+                <label>Baseline Yardages:</label>
+                <select id="handicap-select">
+                    <option value="High">High</option>
+                    <option value="Mid">Mid</option>
+                    <option value="Low">Low</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="settings card">
+            <h3>Bag Builder</h3>
+            <div class="add-club-row">
+                <select id="new-club-select">
+                    <option value="Driver">Driver</option><option value="3 Wood">3 Wood</option><option value="5 Wood">5 Wood</option>
+                    <option value="4 Hybrid">4 Hybrid</option><option value="5 Hybrid">5 Hybrid</option>
+                    <option value="4 Iron">4 Iron</option><option value="5 Iron">5 Iron</option><option value="6 Iron">6 Iron</option>
+                    <option value="7 Iron">7 Iron</option><option value="8 Iron">8 Iron</option><option value="9 Iron">9 Iron</option>
+                    <option value="PW">PW</option><option value="GW">GW</option><option value="SW">SW</option>
+                </select>
+                <button id="add-club-btn" class="action-btn blue-btn">Add</button>
+            </div>
+            <div id="my-bag-list" class="bag-list"></div>
+            <button id="reset-bag-btn" style="margin-top: 10px; font-size: 0.8rem; color: #e74c3c; background: none; border: none; text-decoration: underline; cursor: pointer;">Reset Bag</button>
+        </section>
+
+        <section class="settings card">
+            <h3>Data Backup</h3>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button id="export-btn" class="action-btn blue-btn">Export</button>
+                <button id="import-trigger-btn" class="action-btn gray-btn">Import</button>
+                <input type="file" id="import-file" style="display: none;" accept=".json">
+            </div>
+        </section>
+    </main>
+
     <script src="app.js"></script>
 </body>
 </html>
