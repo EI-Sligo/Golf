@@ -3,10 +3,12 @@
 // ==========================================
 let currentLat = null, currentLng = null, currentHoleIndex = 0; 
 let isTrackingShot = false, shotStartLat = null, shotStartLng = null, pendingDistance = 0;
+
+// Map, Weather & Chart Globals
 let map, userMarker, pinMarker, pathLine, layupMarker;
-let hasCenteredMapThisHole = false;
 let liveWindSpeed = 0, liveWindDir = 0, currentPlaysLike = 0;
 let historyChartInstance = null;
+let hasCenteredMapThisHole = false; // Prevents GPS from hijacking your zoom
 
 const courseData = [
     { hole: 1, lat: 54.19860260754416, lng: -8.430412853346407, par: 4, si: 8 },
@@ -30,11 +32,11 @@ const courseData = [
 ];
 
 const baselineYardages = {
-    "High": { "Driver": 200, "3 Wood": 180, "4 Hybrid": 160, "5 Iron": 150, "7 Iron": 130, "PW": 100 },
-    "Mid":  { "Driver": 230, "3 Wood": 210, "4 Hybrid": 185, "5 Iron": 175, "7 Iron": 155, "PW": 120 },
-    "Low":  { "Driver": 260, "3 Wood": 235, "4 Hybrid": 205, "5 Iron": 195, "7 Iron": 165, "PW": 130 }
+    "High": { "Driver": 200, "3 Wood": 180, "5 Wood": 170, "4 Hybrid": 160, "5 Iron": 150, "6 Iron": 140, "7 Iron": 130, "8 Iron": 120, "9 Iron": 110, "PW": 100, "GW": 90, "SW": 80 },
+    "Mid":  { "Driver": 230, "3 Wood": 210, "5 Wood": 195, "4 Hybrid": 185, "5 Iron": 175, "6 Iron": 165, "7 Iron": 155, "8 Iron": 145, "9 Iron": 135, "PW": 120, "GW": 105, "SW": 95 },
+    "Low":  { "Driver": 260, "3 Wood": 235, "5 Wood": 220, "4 Hybrid": 205, "5 Iron": 195, "6 Iron": 180, "7 Iron": 165, "8 Iron": 155, "9 Iron": 145, "PW": 130, "GW": 115, "SW": 105 }
 };
-const defaultBag = ["Driver", "3 Wood", "4 Hybrid", "5 Iron", "7 Iron", "PW", "SW"];
+const defaultBag = ["Driver", "3 Wood", "4 Hybrid", "5 Iron", "6 Iron", "7 Iron", "8 Iron", "9 Iron", "PW", "SW"];
 
 // ==========================================
 // 2. TABS & BAG SETTINGS
@@ -47,12 +49,14 @@ function switchTab(t) {
     document.querySelectorAll('.nav-btn, .view-section').forEach(el => el.classList.remove('active'));
     document.getElementById(`tab-${t}`).classList.add('active'); 
     document.getElementById(`view-${t}`).classList.add('active');
+    
     if(t === 'play' && map) setTimeout(() => map.invalidateSize(), 100); 
     if(t === 'history') renderHistoryTab();
 }
 
 function getBag() { return JSON.parse(localStorage.getItem('castleDarganBag')) || defaultBag; }
 function saveBag(bag) { localStorage.setItem('castleDarganBag', JSON.stringify(bag)); renderBagUI(); }
+
 function renderBagUI() {
     const bag = getBag();
     document.getElementById('club-select').innerHTML = '<option value="">Select...</option>' + bag.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -154,7 +158,7 @@ function initMap() {
     userMarker = L.marker([0,0], {icon: blueDot}).addTo(map); pinMarker = L.marker([0,0], {icon: redPin}).addTo(map);
     pathLine = L.polyline([], {color: '#f39c12', dashArray: '5, 5', weight: 3}).addTo(map);
 
-    // Layup Tap Logic
+    // LAYUP MAP CLICK LOGIC
     map.on('click', function(e) {
         if(!currentLat) return;
         if(layupMarker) map.removeLayer(layupMarker);
@@ -164,29 +168,25 @@ function initMap() {
         const distToLayup = calculateDistance(currentLat, currentLng, e.latlng.lat, e.latlng.lng);
         const distToPin = calculateDistance(e.latlng.lat, e.latlng.lng, pinMarker.getLatLng().lat, pinMarker.getLatLng().lng);
         
-        // Wind adjustment for layup shot
         const layupBearing = calculateBearing(currentLat, currentLng, e.latlng.lat, e.latlng.lng);
         const layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed)));
         
-        // Wind adjustment for remaining shot to the pin
         const pinBearing = calculateBearing(e.latlng.lat, e.latlng.lng, pinMarker.getLatLng().lat, pinMarker.getLatLng().lng);
         const pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed)));
 
-        // Get club recommendations for both
         const layupRec = getClubRecommendationData(layupPlaysLike);
         const pinRec = getClubRecommendationData(pinPlaysLike);
 
+        // Condensed, phone-friendly popup (autoPan disabled to prevent map spazzing)
         layupMarker.bindPopup(`
-            <div style="text-align: center; font-family: sans-serif;">
-                <b style="color:#2c3e50;">Layup Shot</b><br>
-                ${distToLayup} Yds <span style="color:#e67e22; font-size:0.8rem;">(Plays ${layupPlaysLike})</span><br>
-                <strong style="color:#27ae60;">Hit: ${layupRec ? layupRec.club : 'None'}</strong>
-                <hr style="margin: 8px 0; border: 0; border-top: 1px solid #eee;">
-                <b style="color:#2c3e50;">Remaining to Pin</b><br>
-                ${distToPin} Yds <span style="color:#e67e22; font-size:0.8rem;">(Plays ${pinPlaysLike})</span><br>
-                <strong style="color:#27ae60;">Hit: ${pinRec ? pinRec.club : 'None'}</strong>
+            <div style="text-align: center; font-family: sans-serif; font-size: 0.95rem; min-width: 140px;">
+                <b style="color:#2c3e50;">1. Target</b>: ${distToLayup}y <span style="color:#e67e22; font-size:0.8rem;">(Plays ${layupPlaysLike})</span><br>
+                <b style="color:#27ae60;">Hit: ${layupRec ? layupRec.club : 'None'}</b>
+                <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ccc;">
+                <b style="color:#2c3e50;">2. To Pin</b>: ${distToPin}y <span style="color:#e67e22; font-size:0.8rem;">(Plays ${pinPlaysLike})</span><br>
+                <b style="color:#27ae60;">Hit: ${pinRec ? pinRec.club : 'None'}</b>
             </div>
-        `).openPopup();
+        `, { autoPan: false }).openPopup();
     });
 }
 
@@ -195,7 +195,7 @@ function updateMapState(tLat, tLng) {
     userMarker.setLatLng([currentLat, currentLng]); pinMarker.setLatLng([tLat, tLng]);
     pathLine.setLatLngs([[currentLat, currentLng], [tLat, tLng]]);
     
-    // NEW: Only auto-zoom if we haven't done it for this hole yet
+    // Zoom map only once per hole!
     if (!hasCenteredMapThisHole) {
         map.fitBounds(L.latLngBounds([[currentLat, currentLng], [tLat, tLng]]), { padding: [20, 20], maxZoom: 18 });
         hasCenteredMapThisHole = true;
@@ -253,7 +253,7 @@ function calculateDispersion() {
     return analytics;
 }
 
-// New isolated helper function so the Map popup can use it
+// Isolated helper function for the Layup Map Popup
 function getClubRecommendationData(targetYardage) {
     if (!targetYardage || targetYardage <= 0) return null;
     const analytics = calculateDispersion();
@@ -268,7 +268,6 @@ function getClubRecommendationData(targetYardage) {
     return { club: bestClub, data: analytics[bestClub] };
 }
 
-// Main screen UI updater
 function recommendClub(targetYardage) {
     const rec = getClubRecommendationData(targetYardage);
     const recEl = document.getElementById('recommended-club');
@@ -301,6 +300,7 @@ document.getElementById('save-shot-btn').addEventListener('click', () => {
     let bag = JSON.parse(localStorage.getItem('castleDarganShots')) || [];
     bag.push({ hole: courseData[currentHoleIndex].hole, club: club, distance: pendingDistance, accuracy: document.getElementById('accuracy-select').value, date: new Date().toISOString() });
     localStorage.setItem('castleDarganShots', JSON.stringify(bag));
+    
     updateAnalytics(); 
     resetTrackerUI();
 });
@@ -319,19 +319,22 @@ document.getElementById('update-pin-btn').addEventListener('click', () => {
     let customPins = JSON.parse(localStorage.getItem('castleDarganPins')) || {};
     customPins[currentHoleIndex] = { lat: currentLat, lng: currentLng };
     localStorage.setItem('castleDarganPins', JSON.stringify(customPins));
-    hasCenteredMapThisHole = false; // Allow map to zoom to new pin
+    
+    hasCenteredMapThisHole = false; // Zoom to new pin
     if(currentLat) updateMapState(currentLat, currentLng); 
 });
+
 document.getElementById('reset-pin-btn').addEventListener('click', () => {
     let customPins = JSON.parse(localStorage.getItem('castleDarganPins')) || {};
     if (customPins[currentHoleIndex]) { delete customPins[currentHoleIndex]; localStorage.setItem('castleDarganPins', JSON.stringify(customPins)); }
     const hd = courseData[currentHoleIndex];
-    hasCenteredMapThisHole = false; // Allow map to zoom to new pin
+    
+    hasCenteredMapThisHole = false; // Zoom to center green
     if(hd.lat) updateMapState(hd.lat, hd.lng);
 });
 
 function updateHoleDisplay() {
-    hasCenteredMapThisHole = false; // Allow map to zoom for the new hole
+    hasCenteredMapThisHole = false; // Zoom map on new hole
     const hd = courseData[currentHoleIndex];
     document.getElementById('current-hole').innerText = `Hole ${hd.hole}`;
     document.getElementById('hole-par-display').innerText = `Par ${hd.par} | SI ${hd.si}`;
@@ -377,6 +380,7 @@ document.getElementById('save-score-btn').addEventListener('click', () => {
     let scorecard = JSON.parse(localStorage.getItem('castleDarganScorecard')) || {};
     scorecard[currentHoleIndex] = { hole: hd.hole, par: hd.par, si: hd.si, strokes: strokes, putts: parseInt(document.getElementById('hole-putts').value) || 0, gir: document.getElementById('hole-gir').checked, points: calculateStableford(strokes, hd.par, hd.si) };
     localStorage.setItem('castleDarganScorecard', JSON.stringify(scorecard));
+    
     updateAnalytics(); 
     
     const btn = document.getElementById('save-score-btn');
