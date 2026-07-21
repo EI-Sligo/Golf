@@ -73,7 +73,7 @@
 
             <div style="position: relative; margin-bottom: 10px;">
                 
-                <!-- NEW: CLUB RANGE OVERLAY DROPDOWN -->
+                <!-- CLUB RANGE OVERLAY DROPDOWN -->
                 <select id="club-overlay-select" style="position: absolute; top: 10px; left: 10px; z-index: 1000; padding: 8px; border-radius: 8px; font-weight: bold; border: 2px solid #3498db; background: rgba(255,255,255,0.95); cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); max-width: 60%;">
                     <option value="">🎯 Range Overlay: Off</option>
                 </select>
@@ -119,9 +119,14 @@
                 <div class="caddy-recommendation">
                     <p>Caddy: <strong id="recommended-club">Calculating...</strong></p>
                 </div>
-                <div class="pin-controls">
-                    <button id="update-pin-btn" class="action-btn blue-btn">Set Custom Pin</button>
-                    <button id="reset-pin-btn" class="action-btn gray-btn">Reset</button>
+                
+                <!-- REFORMATTED PIN & TEE CONTROLS -->
+                <div class="pin-controls" style="margin-top: 15px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                        <button id="update-tee-btn" class="action-btn" style="background-color: #27ae60; color: white;">Set Tee Here</button>
+                        <button id="update-pin-btn" class="action-btn blue-btn">Set Pin Here</button>
+                    </div>
+                    <button id="reset-pin-btn" class="action-btn gray-btn" style="width: 100%;">Reset Hole to Default</button>
                 </div>
             </section>
 

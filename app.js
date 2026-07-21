@@ -6,7 +6,8 @@ let isTrackingShot = false, shotStartLat = null, shotStartLng = null, pendingDis
 let shotTargetLat = null, shotTargetLng = null; 
 
 let map, userMarker, pinMarker, pathLine, layupMarker;
-let clubOverlayGroup = null; // NEW: Map Layer for Club Distance Rings
+let yellowLayupIcon = null; // NEW: Globally accessible icon for auto-loading
+let clubOverlayGroup = null; 
 let liveWindSpeed = 0, liveWindDir = 0, currentPlaysLike = 0;
 let historyChartInstance = null, missTendencyChartInstance = null;
 let hasCenteredMapThisHole = false; 
@@ -171,7 +172,6 @@ function saveBag(bag) {
 function renderBagUI() {
     const bag = getBag();
     
-    // Ensure Map Overlay Dropdown Stays Updated with User's Bag
     const overlaySelect = document.getElementById('club-overlay-select');
     const currentOverlay = overlaySelect.value;
     overlaySelect.innerHTML = '<option value="">🎯 Range Overlay: Off</option>' + bag.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -201,7 +201,7 @@ handicapSelect.value = localStorage.getItem('castleDarganHandicap') || "High";
 handicapSelect.addEventListener('change', (e) => { 
     localStorage.setItem('castleDarganHandicap', e.target.value); 
     recommendClub(currentPlaysLike || parseInt(document.getElementById('distance-number').innerText)); 
-    drawClubOverlay(); // Redraw if handicap baseline changes
+    drawClubOverlay(); 
 });
 
 function renderShotsList() {
@@ -238,10 +238,11 @@ window.deleteShot = function(originalIdx) {
         renderShotsList(); 
         updateAnalytics(); 
         if(currentPlaysLike) recommendClub(currentPlaysLike);
-        drawClubOverlay(); // Redraw if stats change
+        drawClubOverlay();
     }
 }
 
+// Ensure layups are backed up in Data Export
 document.getElementById('export-btn').addEventListener('click', () => {
     const backupData = { 
         shots: localStorage.getItem('castleDarganShots'), 
@@ -249,7 +250,8 @@ document.getElementById('export-btn').addEventListener('click', () => {
         bag: localStorage.getItem('castleDarganBag'), 
         history: localStorage.getItem('castleDarganHistory'), 
         pins: localStorage.getItem('castleDarganPins'), 
-        tees: localStorage.getItem('castleDarganTees'), 
+        tees: localStorage.getItem('castleDarganTees'),
+        layups: localStorage.getItem('castleDarganLayups'), // NEW: Backup Planned Layups
         phcap: localStorage.getItem('castleDarganPlayingHandicap') 
     };
     const a = document.createElement('a'); 
@@ -273,6 +275,7 @@ document.getElementById('import-file').addEventListener('change', (e) => {
             if (data.history) localStorage.setItem('castleDarganHistory', data.history);
             if (data.pins) localStorage.setItem('castleDarganPins', data.pins); 
             if (data.tees) localStorage.setItem('castleDarganTees', data.tees);
+            if (data.layups) localStorage.setItem('castleDarganLayups', data.layups); // NEW: Import Planned Layups
             if (data.phcap) localStorage.setItem('castleDarganPlayingHandicap', data.phcap);
             alert("Data imported! App will reload."); 
             location.reload();
@@ -322,7 +325,9 @@ function initMap() {
 
     const blueDot = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#3498db; width:22px; height:22px; border-radius:50%; border:3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5); cursor: grab; pointer-events: auto;'></div>", iconSize: [28,28] });
     const redPin = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#e74c3c; width:15px; height:15px; border-radius:50%; border:2px solid white;'></div>", iconSize: [15,15] });
-    const yellowLayup = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#f1c40f; width:12px; height:12px; border-radius:50%; border:2px solid white;'></div>", iconSize: [12,12] });
+    
+    // NEW: Assigned globally so it can be auto-loaded during hole switches
+    yellowLayupIcon = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#f1c40f; width:12px; height:12px; border-radius:50%; border:2px solid white;'></div>", iconSize: [12,12] });
 
     userMarker = L.marker([0,0], {icon: blueDot, draggable: true}).addTo(map); 
     userMarker.dragging.disable(); 
@@ -338,10 +343,18 @@ function initMap() {
         saveNewTeeLocation(e.latlng); 
     });
 
+    // Tap Map to set Layup Target
     map.on('click', function(e) {
         if(!currentLat) return;
         if(layupMarker) map.removeLayer(layupMarker);
-        layupMarker = L.marker(e.latlng, {icon: yellowLayup}).addTo(map);
+        
+        layupMarker = L.marker(e.latlng, {icon: yellowLayupIcon}).addTo(map);
+        
+        // NEW: Save the Layup permanently to Local Storage!
+        let savedLayups = JSON.parse(localStorage.getItem('castleDarganLayups')) || {};
+        savedLayups[currentHoleIndex] = { lat: e.latlng.lat, lng: e.latlng.lng };
+        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+        
         updateLayupData(e.latlng.lat, e.latlng.lng);
     });
 }
@@ -407,6 +420,13 @@ function updateLayupData(layupLat, layupLng) {
 document.getElementById('clear-layup-btn').addEventListener('click', () => { 
     document.getElementById('layup-info-box').style.display = 'none'; 
     if(layupMarker) { map.removeLayer(layupMarker); layupMarker = null; }
+    
+    // NEW: Delete saved Layup from Local Storage when cleared
+    let savedLayups = JSON.parse(localStorage.getItem('castleDarganLayups')) || {};
+    if(savedLayups[currentHoleIndex]) {
+        delete savedLayups[currentHoleIndex];
+        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+    }
 });
 
 document.getElementById('recenter-map-btn').addEventListener('click', () => {
@@ -436,7 +456,7 @@ function updateMapState(tLat, tLng) {
 }
 
 // ==========================================
-// NEW: CLUB RANGE OVERLAY VISUALIZATION
+// CLUB RANGE OVERLAY VISUALIZATION
 // ==========================================
 document.getElementById('club-overlay-select').addEventListener('change', drawClubOverlay);
 
@@ -455,9 +475,7 @@ function drawClubOverlay() {
     clubOverlayGroup = L.layerGroup().addTo(map);
     const center = [currentLat, currentLng];
 
-    // Note: Leaflet distances are in meters. (Yards * 0.9144 = Meters)
     if(data.max && data.min) {
-        // Red Dashed Ring: The Minimum Chunk Distance
         L.circle(center, { 
             radius: data.min * 0.9144, 
             color: '#e74c3c', 
@@ -466,7 +484,6 @@ function drawClubOverlay() {
             fill: false 
         }).bindTooltip(`Min: ${data.min}y`, {direction: 'top'}).addTo(clubOverlayGroup);
         
-        // Green Dashed Ring: The Crushed Max Distance
         L.circle(center, { 
             radius: data.max * 0.9144, 
             color: '#27ae60', 
@@ -476,7 +493,6 @@ function drawClubOverlay() {
         }).bindTooltip(`Max: ${data.max}y`, {direction: 'top'}).addTo(clubOverlayGroup);
     }
     
-    // Blue Solid Ring: The Reliable Average Distance
     L.circle(center, { 
         radius: data.avg * 0.9144, 
         color: '#3498db', 
@@ -486,7 +502,9 @@ function drawClubOverlay() {
     }).bindTooltip(`${club} Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
 }
 
-// THE LOCATION ENGINE 
+// ==========================================
+// THE LOCATION ENGINE (Live & Planner Mode Logic)
+// ==========================================
 function processLocation(lat, lng) {
     currentLat = lat; 
     currentLng = lng;
@@ -513,6 +531,7 @@ function processLocation(lat, lng) {
     
     document.getElementById('distance-number').innerText = rawYardage > 0 ? rawYardage : "--"; 
 
+    // Geofencing Auto-Advance
     if (!isPlannerMode) {
         if (rawYardage < 30) { hasReachedGreen = true; }
         if (hasReachedGreen && rawYardage > 60) {
@@ -533,9 +552,23 @@ function processLocation(lat, lng) {
     if(tLat) updateMapState(tLat, tLng); 
     recommendClub(currentPlaysLike);
     
-    if(layupMarker) updateLayupData(layupMarker.getLatLng().lat, layupMarker.getLatLng().lng);
+    // NEW: Load saved Layup automatically!
+    const savedLayups = JSON.parse(localStorage.getItem('castleDarganLayups')) || {};
+    if (savedLayups[currentHoleIndex] && map && yellowLayupIcon) {
+        const lLat = savedLayups[currentHoleIndex].lat;
+        const lLng = savedLayups[currentHoleIndex].lng;
+        
+        if (!layupMarker) {
+            layupMarker = L.marker([lLat, lLng], {icon: yellowLayupIcon}).addTo(map);
+        } else {
+            layupMarker.setLatLng([lLat, lLng]); // Ensure it's in the exact correct position
+        }
+        updateLayupData(lLat, lLng);
+    } else {
+        if(layupMarker) { map.removeLayer(layupMarker); layupMarker = null; }
+        document.getElementById('layup-info-box').style.display = 'none';
+    }
     
-    // Auto-redraw the club overlay if user moves
     drawClubOverlay();
 }
 
@@ -636,7 +669,6 @@ document.getElementById('track-btn').addEventListener('click', () => {
         shotStartLat = currentLat; 
         shotStartLng = currentLng;
         
-        // 1. Lock in the Target!
         if (layupMarker) {
             shotTargetLat = layupMarker.getLatLng().lat; 
             shotTargetLng = layupMarker.getLatLng().lng;
@@ -658,7 +690,6 @@ document.getElementById('track-btn').addEventListener('click', () => {
         pendingDistance = calculateDistance(shotStartLat, shotStartLng, currentLat, currentLng);
         document.getElementById('pending-distance').innerText = pendingDistance;
 
-        // 2. DISPERSION MATH
         let missDistance = calculateDistance(currentLat, currentLng, shotTargetLat, shotTargetLng);
         let targetBearing = calculateBearing(shotStartLat, shotStartLng, shotTargetLat, shotTargetLng);
         let actualBearing = calculateBearing(shotStartLat, shotStartLng, currentLat, currentLng);
@@ -740,6 +771,33 @@ function resetTrackerUI() {
 // ==========================================
 // 7. PINS & SCORECARD
 // ==========================================
+document.getElementById('update-tee-btn').addEventListener('click', () => {
+    if (!currentLat) return alert("Waiting for GPS...");
+    
+    const selectedTee = document.getElementById('tee-box-select').value;
+    let savedTees = JSON.parse(localStorage.getItem('castleDarganTees')) || {};
+    
+    if(!savedTees[currentHoleIndex]) savedTees[currentHoleIndex] = {};
+    const oldTee = savedTees[currentHoleIndex][selectedTee];
+    
+    savedTees[currentHoleIndex][selectedTee] = { lat: currentLat, lng: currentLng };
+    localStorage.setItem('castleDarganTees', JSON.stringify(savedTees));
+    
+    hasCenteredMapThisHole = false; 
+    
+    showToast("Tee Box Saved to Current Location!", () => {
+        if (oldTee) {
+            savedTees[currentHoleIndex][selectedTee] = oldTee;
+        } else {
+            delete savedTees[currentHoleIndex][selectedTee];
+        }
+        localStorage.setItem('castleDarganTees', JSON.stringify(savedTees)); 
+        updateHoleDisplay(); 
+    });
+    
+    updateHoleDisplay(); 
+});
+
 document.getElementById('update-pin-btn').addEventListener('click', () => {
     if (!currentLat) return alert("Waiting for GPS...");
     let customPins = JSON.parse(localStorage.getItem('castleDarganPins')) || {};
@@ -751,14 +809,30 @@ document.getElementById('update-pin-btn').addEventListener('click', () => {
 });
 
 document.getElementById('reset-pin-btn').addEventListener('click', () => {
+    // 1. Reset Pin
     let customPins = JSON.parse(localStorage.getItem('castleDarganPins')) || {};
     if (customPins[currentHoleIndex]) { 
         delete customPins[currentHoleIndex]; 
         localStorage.setItem('castleDarganPins', JSON.stringify(customPins)); 
     }
-    const hd = courseData[currentHoleIndex]; 
+    
+    // 2. Reset Tee
+    const selectedTee = document.getElementById('tee-box-select').value;
+    let customTees = JSON.parse(localStorage.getItem('castleDarganTees')) || {};
+    if (customTees[currentHoleIndex] && customTees[currentHoleIndex][selectedTee]) {
+        delete customTees[currentHoleIndex][selectedTee];
+        localStorage.setItem('castleDarganTees', JSON.stringify(customTees));
+    }
+    
+    // 3. NEW: Reset Planned Layup Target
+    let savedLayups = JSON.parse(localStorage.getItem('castleDarganLayups')) || {};
+    if(savedLayups[currentHoleIndex]) {
+        delete savedLayups[currentHoleIndex];
+        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+    }
+
     hasCenteredMapThisHole = false; 
-    if(hd.lat) updateMapState(hd.lat, hd.lng);
+    updateHoleDisplay();
 });
 
 function updateHoleDisplay() {
@@ -800,6 +874,15 @@ function updateHoleDisplay() {
         processLocation(teeCoords.lat, teeCoords.lng);
     } else {
         if(userMarker) { userMarker.dragging.disable(); }
+        
+        let tLat = courseData[currentHoleIndex].lat;
+        let tLng = courseData[currentHoleIndex].lng;
+        const customPins = JSON.parse(localStorage.getItem('castleDarganPins')) || {};
+        if (customPins[currentHoleIndex]) { 
+            tLat = customPins[currentHoleIndex].lat; 
+            tLng = customPins[currentHoleIndex].lng; 
+        }
+        if(currentLat && tLat) updateMapState(tLat, tLng);
     }
 }
 
