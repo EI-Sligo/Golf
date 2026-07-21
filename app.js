@@ -4,11 +4,10 @@
 let currentLat = null, currentLng = null, currentHoleIndex = 0; 
 let isTrackingShot = false, shotStartLat = null, shotStartLng = null, pendingDistance = 0;
 
-// Map, Weather & Chart Globals
 let map, userMarker, pinMarker, pathLine, layupMarker;
 let liveWindSpeed = 0, liveWindDir = 0, currentPlaysLike = 0;
 let historyChartInstance = null;
-let hasCenteredMapThisHole = false; // Prevents GPS from hijacking your zoom
+let hasCenteredMapThisHole = false; 
 
 const courseData = [
     { hole: 1, lat: 54.19860260754416, lng: -8.430412853346407, par: 4, si: 8 },
@@ -32,11 +31,11 @@ const courseData = [
 ];
 
 const baselineYardages = {
-    "High": { "Driver": 200, "3 Wood": 180, "5 Wood": 170, "4 Hybrid": 160, "5 Iron": 150, "6 Iron": 140, "7 Iron": 130, "8 Iron": 120, "9 Iron": 110, "PW": 100, "GW": 90, "SW": 80 },
-    "Mid":  { "Driver": 230, "3 Wood": 210, "5 Wood": 195, "4 Hybrid": 185, "5 Iron": 175, "6 Iron": 165, "7 Iron": 155, "8 Iron": 145, "9 Iron": 135, "PW": 120, "GW": 105, "SW": 95 },
-    "Low":  { "Driver": 260, "3 Wood": 235, "5 Wood": 220, "4 Hybrid": 205, "5 Iron": 195, "6 Iron": 180, "7 Iron": 165, "8 Iron": 155, "9 Iron": 145, "PW": 130, "GW": 115, "SW": 105 }
+    "High": { "Driver": 200, "3 Wood": 180, "4 Hybrid": 160, "5 Iron": 150, "7 Iron": 130, "PW": 100 },
+    "Mid":  { "Driver": 230, "3 Wood": 210, "4 Hybrid": 185, "5 Iron": 175, "7 Iron": 155, "PW": 120 },
+    "Low":  { "Driver": 260, "3 Wood": 235, "4 Hybrid": 205, "5 Iron": 195, "7 Iron": 165, "PW": 130 }
 };
-const defaultBag = ["Driver", "3 Wood", "4 Hybrid", "5 Iron", "6 Iron", "7 Iron", "8 Iron", "9 Iron", "PW", "SW"];
+const defaultBag = ["Driver", "3 Wood", "4 Hybrid", "5 Iron", "7 Iron", "PW", "SW"];
 
 // ==========================================
 // 2. TABS & BAG SETTINGS
@@ -49,14 +48,13 @@ function switchTab(t) {
     document.querySelectorAll('.nav-btn, .view-section').forEach(el => el.classList.remove('active'));
     document.getElementById(`tab-${t}`).classList.add('active'); 
     document.getElementById(`view-${t}`).classList.add('active');
-    
     if(t === 'play' && map) setTimeout(() => map.invalidateSize(), 100); 
     if(t === 'history') renderHistoryTab();
+    if(t === 'settings') renderShotsList(); // Update shots list when opening settings
 }
 
 function getBag() { return JSON.parse(localStorage.getItem('castleDarganBag')) || defaultBag; }
 function saveBag(bag) { localStorage.setItem('castleDarganBag', JSON.stringify(bag)); renderBagUI(); }
-
 function renderBagUI() {
     const bag = getBag();
     document.getElementById('club-select').innerHTML = '<option value="">Select...</option>' + bag.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -83,6 +81,50 @@ handicapSelect.addEventListener('change', (e) => {
     localStorage.setItem('castleDarganHandicap', e.target.value);
     recommendClub(currentPlaysLike || parseInt(document.getElementById('distance-number').innerText)); 
 });
+
+// ==========================================
+// 2B. NEW: MANAGE SHOT HISTORY
+// ==========================================
+function renderShotsList() {
+    const shots = JSON.parse(localStorage.getItem('castleDarganShots')) || [];
+    const listEl = document.getElementById('tracked-shots-list');
+    
+    if (shots.length === 0) {
+        listEl.innerHTML = "<p style='text-align: center; color: #7f8c8d;'>No shots tracked yet.</p>";
+        return;
+    }
+
+    listEl.innerHTML = '';
+    // Reverse so newest is at the top, but track the original array index for deletion
+    [...shots].reverse().forEach((s, reversedIdx) => {
+        const originalIdx = shots.length - 1 - reversedIdx;
+        const dateStr = s.date ? new Date(s.date).toLocaleDateString() : 'Unknown Date';
+        
+        listEl.innerHTML += `
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 10px 0;">
+                <div>
+                    <strong style="color: #2c3e50;">${s.club}</strong> - <span style="color: #27ae60; font-weight: bold;">${s.distance} Yds</span><br>
+                    <span style="font-size: 0.8rem; color: #7f8c8d;">${s.accuracy || 'Fairway'} | Hole ${s.hole || '?'} | ${dateStr}</span>
+                </div>
+                <button onclick="deleteShot(${originalIdx})" style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 1.2rem;">🗑️</button>
+            </div>
+        `;
+    });
+}
+
+window.deleteShot = function(originalIdx) {
+    if (confirm("Delete this shot from your club averages?")) {
+        let shots = JSON.parse(localStorage.getItem('castleDarganShots')) || [];
+        shots.splice(originalIdx, 1);
+        localStorage.setItem('castleDarganShots', JSON.stringify(shots));
+        
+        renderShotsList(); // Refresh list UI
+        updateAnalytics(); // Refresh Fairway Hit %
+        
+        // Recalculate Caddy logic instantly if we are playing
+        if(currentPlaysLike) recommendClub(currentPlaysLike);
+    }
+}
 
 // ==========================================
 // 3. BACKUP (EXPORT / IMPORT)
@@ -158,45 +200,63 @@ function initMap() {
     userMarker = L.marker([0,0], {icon: blueDot}).addTo(map); pinMarker = L.marker([0,0], {icon: redPin}).addTo(map);
     pathLine = L.polyline([], {color: '#f39c12', dashArray: '5, 5', weight: 3}).addTo(map);
 
-    // LAYUP MAP CLICK LOGIC
     map.on('click', function(e) {
         if(!currentLat) return;
         if(layupMarker) map.removeLayer(layupMarker);
         
         layupMarker = L.marker(e.latlng, {icon: yellowLayup}).addTo(map);
-        
-        const distToLayup = calculateDistance(currentLat, currentLng, e.latlng.lat, e.latlng.lng);
-        const distToPin = calculateDistance(e.latlng.lat, e.latlng.lng, pinMarker.getLatLng().lat, pinMarker.getLatLng().lng);
-        
-        const layupBearing = calculateBearing(currentLat, currentLng, e.latlng.lat, e.latlng.lng);
-        const layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed)));
-        
-        const pinBearing = calculateBearing(e.latlng.lat, e.latlng.lng, pinMarker.getLatLng().lat, pinMarker.getLatLng().lng);
-        const pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed)));
-
-        const layupRec = getClubRecommendationData(layupPlaysLike);
-        const pinRec = getClubRecommendationData(pinPlaysLike);
-
-        // Condensed, phone-friendly popup (autoPan disabled to prevent map spazzing)
-        layupMarker.bindPopup(`
-            <div style="text-align: center; font-family: sans-serif; font-size: 0.95rem; min-width: 140px;">
-                <b style="color:#2c3e50;">1. Target</b>: ${distToLayup}y <span style="color:#e67e22; font-size:0.8rem;">(Plays ${layupPlaysLike})</span><br>
-                <b style="color:#27ae60;">Hit: ${layupRec ? layupRec.club : 'None'}</b>
-                <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ccc;">
-                <b style="color:#2c3e50;">2. To Pin</b>: ${distToPin}y <span style="color:#e67e22; font-size:0.8rem;">(Plays ${pinPlaysLike})</span><br>
-                <b style="color:#27ae60;">Hit: ${pinRec ? pinRec.club : 'None'}</b>
-            </div>
-        `, { autoPan: false }).openPopup();
+        updateLayupData(e.latlng.lat, e.latlng.lng);
     });
 }
 
+function updateLayupData(layupLat, layupLng) {
+    document.getElementById('layup-info-box').style.display = 'block';
+
+    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
+    const customPins = JSON.parse(localStorage.getItem('castleDarganPins')) || {};
+    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+
+    const distToLayup = calculateDistance(currentLat, currentLng, layupLat, layupLng);
+    const distToPin = calculateDistance(layupLat, layupLng, tLat, tLng);
+    
+    const layupBearing = calculateBearing(currentLat, currentLng, layupLat, layupLng);
+    const layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed)));
+    
+    const pinBearing = calculateBearing(layupLat, layupLng, tLat, tLng);
+    const pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed)));
+
+    const layupRec = getClubRecommendationData(layupPlaysLike);
+    const pinRec = getClubRecommendationData(pinPlaysLike);
+
+    document.getElementById('layup-dist').innerText = distToLayup;
+    document.getElementById('layup-plays').innerText = layupPlaysLike;
+    document.getElementById('layup-club').innerText = layupRec ? layupRec.club : 'None';
+
+    document.getElementById('layup-rem').innerText = distToPin;
+    document.getElementById('layup-rem-plays').innerText = pinPlaysLike;
+    document.getElementById('layup-rem-club').innerText = pinRec ? pinRec.club : 'None';
+}
+
+document.getElementById('clear-layup-btn').addEventListener('click', () => {
+    document.getElementById('layup-info-box').style.display = 'none';
+    if(layupMarker) { map.removeLayer(layupMarker); layupMarker = null; }
+});
+
+document.getElementById('recenter-map-btn').addEventListener('click', () => {
+    hasCenteredMapThisHole = false; 
+    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
+    const customPins = JSON.parse(localStorage.getItem('castleDarganPins')) || {};
+    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+    if(currentLat && tLat) updateMapState(tLat, tLng);
+});
+
 function updateMapState(tLat, tLng) {
     if(!map) initMap();
-    userMarker.setLatLng([currentLat, currentLng]); pinMarker.setLatLng([tLat, tLng]);
-    pathLine.setLatLngs([[currentLat, currentLng], [tLat, tLng]]);
+    if(currentLat) userMarker.setLatLng([currentLat, currentLng]); 
+    if(tLat) pinMarker.setLatLng([tLat, tLng]);
+    if(currentLat && tLat) pathLine.setLatLngs([[currentLat, currentLng], [tLat, tLng]]);
     
-    // Zoom map only once per hole!
-    if (!hasCenteredMapThisHole) {
+    if (!hasCenteredMapThisHole && currentLat && tLat) {
         map.fitBounds(L.latLngBounds([[currentLat, currentLng], [tLat, tLng]]), { padding: [20, 20], maxZoom: 18 });
         hasCenteredMapThisHole = true;
     }
@@ -223,6 +283,8 @@ function initGPS() {
 
                 if(tLat) updateMapState(tLat, tLng);
                 recommendClub(currentPlaysLike);
+
+                if(layupMarker) updateLayupData(layupMarker.getLatLng().lat, layupMarker.getLatLng().lng);
             },
             (err) => console.log("GPS Err"), { enableHighAccuracy: true, maximumAge: 0 } 
         );
@@ -253,7 +315,6 @@ function calculateDispersion() {
     return analytics;
 }
 
-// Isolated helper function for the Layup Map Popup
 function getClubRecommendationData(targetYardage) {
     if (!targetYardage || targetYardage <= 0) return null;
     const analytics = calculateDispersion();
@@ -320,26 +381,27 @@ document.getElementById('update-pin-btn').addEventListener('click', () => {
     customPins[currentHoleIndex] = { lat: currentLat, lng: currentLng };
     localStorage.setItem('castleDarganPins', JSON.stringify(customPins));
     
-    hasCenteredMapThisHole = false; // Zoom to new pin
+    hasCenteredMapThisHole = false; 
     if(currentLat) updateMapState(currentLat, currentLng); 
 });
-
 document.getElementById('reset-pin-btn').addEventListener('click', () => {
     let customPins = JSON.parse(localStorage.getItem('castleDarganPins')) || {};
     if (customPins[currentHoleIndex]) { delete customPins[currentHoleIndex]; localStorage.setItem('castleDarganPins', JSON.stringify(customPins)); }
     const hd = courseData[currentHoleIndex];
     
-    hasCenteredMapThisHole = false; // Zoom to center green
+    hasCenteredMapThisHole = false; 
     if(hd.lat) updateMapState(hd.lat, hd.lng);
 });
 
 function updateHoleDisplay() {
-    hasCenteredMapThisHole = false; // Zoom map on new hole
+    hasCenteredMapThisHole = false; 
     const hd = courseData[currentHoleIndex];
     document.getElementById('current-hole').innerText = `Hole ${hd.hole}`;
     document.getElementById('hole-par-display').innerText = `Par ${hd.par} | SI ${hd.si}`;
     document.getElementById('scorecard-hole-num').innerText = hd.hole;
+    
     if(layupMarker) { map.removeLayer(layupMarker); layupMarker = null; }
+    document.getElementById('layup-info-box').style.display = 'none';
     
     const scorecard = JSON.parse(localStorage.getItem('castleDarganScorecard')) || {};
     if (scorecard[currentHoleIndex]) {
@@ -487,6 +549,7 @@ if ('serviceWorker' in navigator) {
 }
 
 renderBagUI();
+renderShotsList(); 
 updateHoleDisplay();
 updateAnalytics();
 initGPS();

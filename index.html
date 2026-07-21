@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Castle Dargan Caddy</title>
     
-    <!-- PWA Manifest & App Config -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Golf_flag.svg/512px-Golf_flag.svg.png">
@@ -38,11 +37,32 @@
             </div>
         </header>
 
-        <!-- REPLACED: Satellite Map Display -->
-<div id="map" style="height: 350px; border-radius: 15px; z-index: 1; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></div>
+        <div style="position: relative; margin-bottom: 10px;">
+            <div id="map" style="height: 300px; border-radius: 15px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></div>
+            <button id="recenter-map-btn" style="position: absolute; bottom: 15px; right: 15px; z-index: 1000; background: white; border: none; border-radius: 8px; padding: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 1.2rem;">🎯</button>
+        </div>
+
+        <div id="layup-info-box" style="display: none; background: #fff; border-left: 5px solid #f1c40f; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <h4 style="margin: 0 0 10px 0; color: #2c3e50;">Layup Strategy</h4>
+                <button id="clear-layup-btn" style="background: none; border: none; color: #e74c3c; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 0.8;">&times;</button>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.95rem;">
+                <div style="flex: 1; padding-right: 10px;">
+                    <b style="color: #2c3e50;">1. To Layup:</b> <span id="layup-dist" style="font-weight:bold;">--</span>y<br>
+                    <span style="color: #e67e22; font-size: 0.8rem;">(Plays <span id="layup-plays">--</span>y)</span><br>
+                    <strong style="color: #27ae60;" id="layup-club">--</strong>
+                </div>
+                <div style="flex: 1; border-left: 1px solid #eee; padding-left: 10px;">
+                    <b style="color: #2c3e50;">2. To Pin:</b> <span id="layup-rem" style="font-weight:bold;">--</span>y<br>
+                    <span style="color: #e67e22; font-size: 0.8rem;">(Plays <span id="layup-rem-plays">--</span>y)</span><br>
+                    <strong style="color: #27ae60;" id="layup-rem-club">--</strong>
+                </div>
+            </div>
+        </div>
 
         <section class="gps-display card">
-            <p style="margin-top: 0; color: #7f8c8d; font-weight: bold; text-transform: uppercase; font-size: 0.8rem;">Actual Distance</p>
+            <p style="margin-top: 0; color: #7f8c8d; font-weight: bold; text-transform: uppercase; font-size: 0.8rem;">Distance to Pin</p>
             <div class="yardage" style="margin-top: -10px;"><span id="distance-number">--</span><span class="unit">Yds</span></div>
             
             <div class="plays-like-box">
@@ -57,8 +77,8 @@
                 <p>Caddy: <strong id="recommended-club">Calculating...</strong></p>
             </div>
             <div class="pin-controls">
-                <button id="update-pin-btn" class="action-btn blue-btn">Set Pin</button>
-                <button id="reset-pin-btn" class="action-btn gray-btn">Reset</button>
+                <button id="update-pin-btn" class="action-btn blue-btn">Set Custom Pin</button>
+                <button id="reset-pin-btn" class="action-btn gray-btn">Reset to Center</button>
             </div>
         </section>
 
@@ -98,7 +118,6 @@
             <button id="save-score-btn" class="primary-btn" style="margin-top: 15px; background-color: #2c3e50;">Save Score</button>
         </section>
 
-        <!-- RESTORED ANALYTICS CARD -->
         <section class="analytics card">
             <h3>My Analytics (This Round)</h3>
             <div class="stats-grid">
@@ -160,6 +179,15 @@
             </div>
             <div id="my-bag-list" class="bag-list"></div>
             <button id="reset-bag-btn" style="margin-top: 10px; font-size: 0.8rem; color: #e74c3c; background: none; border: none; text-decoration: underline; cursor: pointer;">Reset Bag</button>
+        </section>
+
+        <!-- NEW: Manage Tracked Shots -->
+        <section class="settings card">
+            <h3>Manage Tracked Shots</h3>
+            <p style="font-size: 0.85rem; color: #555; margin-top: 0;">Delete bad data (like a 0-yard misclick) to fix your club averages.</p>
+            <div id="tracked-shots-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 10px;">
+                <!-- JS will populate this -->
+            </div>
         </section>
 
         <section class="settings card">
