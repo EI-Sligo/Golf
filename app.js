@@ -6,18 +6,15 @@ let isTrackingShot = false, shotStartLat = null, shotStartLng = null, pendingDis
 let shotTargetLat = null, shotTargetLng = null; 
 
 let map, userMarker, pinMarker, pathLine;
-
-// Separation of Active and Planned Map Elements
-let liveTargetMarker = null; 
-let passiveRouteGroup = null; 
-let plannerRouteGroup = null; 
-
 let layupMarkers = []; 
 let plannedClubs = []; 
 
 let yellowLayupIcon = null; 
 let clubOverlayGroup = null; 
 let tracerMap = null; 
+let liveTargetMarker = null; 
+let passiveRouteGroup = null; 
+let plannerRouteGroup = null; 
 
 let liveWindSpeed = 0, liveWindDir = 0, currentPlaysLike = 0;
 let historyChartInstance = null, missTendencyChartInstance = null;
@@ -386,9 +383,8 @@ function saveNewTeeLocation(latlng) {
     if (isPlannerMode) processLocation(latlng.lat, latlng.lng);
 }
 
-
 // ==========================================
-// NEW: DYNAMIC MULTI-SHOT PLANNER (PLANNER MODE ONLY)
+// DYNAMIC MULTI-SHOT PLANNER
 // ==========================================
 function updatePlannerDropdown() {
     let savedLayups = safeParse('castleDarganLayups', {});
@@ -507,7 +503,7 @@ function renderPlannerUI() {
             </div>`;
             
         let data = analytics[club];
-        if(data && data.avg && i < route.length) {
+        if(data && data.avg) {
             let dispersionAngle = data.spread || 10; 
             let avgMeters = data.avg * 0.9144;
             let maxMeters = (data.max || data.avg + 20) * 0.9144;
@@ -553,7 +549,7 @@ window.updatePlannerRouteClub = function(index, club) {
 // PASSIVE ROUTE GUIDE (PLAY MODE ONLY)
 // ==========================================
 function drawPassivePlannedRoute() {
-    if (!map) initMap();
+    if (!map) initMap(); 
     if (passiveRouteGroup && map) map.removeLayer(passiveRouteGroup);
     passiveRouteGroup = L.layerGroup().addTo(map);
 
@@ -593,9 +589,10 @@ function drawPassivePlannedRoute() {
 document.getElementById('club-overlay-select').addEventListener('change', drawClubOverlay);
 
 function drawClubOverlay() {
-    if(clubOverlayGroup && map) map.removeLayer(clubOverlayGroup); 
+    if (!map) return;
+    if(clubOverlayGroup) map.removeLayer(clubOverlayGroup); 
     const club = document.getElementById('club-overlay-select').value;
-    if(!club || !currentLat || !map) return;
+    if(!club || !currentLat) return;
     
     const analytics = calculateDispersion(); 
     const data = analytics[club];
@@ -919,7 +916,7 @@ document.getElementById('reset-pin-btn').addEventListener('click', () => {
 });
 
 function updateHoleDisplay() {
-    if (!map) initMap(); // FAILSAFE: GUARANTEES MAP EXISTS BEFORE DRAWING
+    if (!map) initMap(); 
     
     hasCenteredMapThisHole = false; hasReachedGreen = false;
     const hd = courseData[currentHoleIndex]; const selectedTee = document.getElementById('tee-box-select').value;
