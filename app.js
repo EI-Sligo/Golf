@@ -6,6 +6,7 @@ let isTrackingShot = false, shotStartLat = null, shotStartLng = null, pendingDis
 let shotTargetLat = null, shotTargetLng = null; 
 
 let map, userMarker, pinMarker, pathLine, layupMarker;
+let clubOverlayGroup = null; // NEW: Map Layer for Club Distance Rings
 let liveWindSpeed = 0, liveWindDir = 0, currentPlaysLike = 0;
 let historyChartInstance = null, missTendencyChartInstance = null;
 let hasCenteredMapThisHole = false; 
@@ -59,7 +60,6 @@ function generateTees() {
 }
 generateTees();
 
-// Complete Iron & Wood Baselines
 const baselineYardages = { 
     "High": { "Driver": 200, "3 Wood": 180, "5 Wood": 170, "4 Hybrid": 160, "5 Hybrid": 150, "4 Iron": 160, "5 Iron": 150, "6 Iron": 140, "7 Iron": 130, "8 Iron": 120, "9 Iron": 110, "PW": 100, "GW": 90, "SW": 80, "Putter": 15 }, 
     "Mid":  { "Driver": 230, "3 Wood": 210, "5 Wood": 195, "4 Hybrid": 185, "5 Hybrid": 175, "4 Iron": 185, "5 Iron": 175, "6 Iron": 165, "7 Iron": 155, "8 Iron": 145, "9 Iron": 135, "PW": 120, "GW": 105, "SW": 95, "Putter": 15 }, 
@@ -170,6 +170,13 @@ function saveBag(bag) {
 
 function renderBagUI() {
     const bag = getBag();
+    
+    // Ensure Map Overlay Dropdown Stays Updated with User's Bag
+    const overlaySelect = document.getElementById('club-overlay-select');
+    const currentOverlay = overlaySelect.value;
+    overlaySelect.innerHTML = '<option value="">🎯 Range Overlay: Off</option>' + bag.map(c => `<option value="${c}">${c}</option>`).join('');
+    overlaySelect.value = currentOverlay;
+
     document.getElementById('club-select').innerHTML = '<option value="">Select...</option>' + bag.map(c => `<option value="${c}">${c}</option>`).join('');
     document.getElementById('my-bag-list').innerHTML = bag.map(c => `<div class="club-tag">${c} <button class="remove-club" onclick="removeClub('${c}')">x</button></div>`).join('');
 }
@@ -194,6 +201,7 @@ handicapSelect.value = localStorage.getItem('castleDarganHandicap') || "High";
 handicapSelect.addEventListener('change', (e) => { 
     localStorage.setItem('castleDarganHandicap', e.target.value); 
     recommendClub(currentPlaysLike || parseInt(document.getElementById('distance-number').innerText)); 
+    drawClubOverlay(); // Redraw if handicap baseline changes
 });
 
 function renderShotsList() {
@@ -230,6 +238,7 @@ window.deleteShot = function(originalIdx) {
         renderShotsList(); 
         updateAnalytics(); 
         if(currentPlaysLike) recommendClub(currentPlaysLike);
+        drawClubOverlay(); // Redraw if stats change
     }
 }
 
@@ -321,17 +330,14 @@ function initMap() {
     pinMarker = L.marker([0,0], {icon: redPin}).addTo(map);
     pathLine = L.polyline([], {color: '#f39c12', dashArray: '5, 5', weight: 3}).addTo(map);
 
-    // Draggable blue dot logic
     userMarker.on('dragend', function(e) { 
         saveNewTeeLocation(e.target.getLatLng()); 
     });
 
-    // Right click tee setter
     map.on('contextmenu', function(e) { 
         saveNewTeeLocation(e.latlng); 
     });
 
-    // Layup setting
     map.on('click', function(e) {
         if(!currentLat) return;
         if(layupMarker) map.removeLayer(layupMarker);
@@ -429,7 +435,58 @@ function updateMapState(tLat, tLng) {
     }
 }
 
-// THE LOCATION ENGINE (Live & Planner Mode Logic)
+// ==========================================
+// NEW: CLUB RANGE OVERLAY VISUALIZATION
+// ==========================================
+document.getElementById('club-overlay-select').addEventListener('change', drawClubOverlay);
+
+function drawClubOverlay() {
+    if(clubOverlayGroup && map) { 
+        map.removeLayer(clubOverlayGroup); 
+    }
+    
+    const club = document.getElementById('club-overlay-select').value;
+    if(!club || !currentLat || !map) return;
+
+    const analytics = calculateDispersion();
+    const data = analytics[club];
+    if(!data || !data.avg) return;
+
+    clubOverlayGroup = L.layerGroup().addTo(map);
+    const center = [currentLat, currentLng];
+
+    // Note: Leaflet distances are in meters. (Yards * 0.9144 = Meters)
+    if(data.max && data.min) {
+        // Red Dashed Ring: The Minimum Chunk Distance
+        L.circle(center, { 
+            radius: data.min * 0.9144, 
+            color: '#e74c3c', 
+            weight: 2, 
+            dashArray: '5, 5', 
+            fill: false 
+        }).bindTooltip(`Min: ${data.min}y`, {direction: 'top'}).addTo(clubOverlayGroup);
+        
+        // Green Dashed Ring: The Crushed Max Distance
+        L.circle(center, { 
+            radius: data.max * 0.9144, 
+            color: '#27ae60', 
+            weight: 2, 
+            dashArray: '5, 5', 
+            fill: false 
+        }).bindTooltip(`Max: ${data.max}y`, {direction: 'top'}).addTo(clubOverlayGroup);
+    }
+    
+    // Blue Solid Ring: The Reliable Average Distance
+    L.circle(center, { 
+        radius: data.avg * 0.9144, 
+        color: '#3498db', 
+        weight: 3, 
+        fillOpacity: 0.05, 
+        fillColor: '#3498db' 
+    }).bindTooltip(`${club} Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
+}
+
+// THE LOCATION ENGINE 
 function processLocation(lat, lng) {
     currentLat = lat; 
     currentLng = lng;
@@ -456,7 +513,6 @@ function processLocation(lat, lng) {
     
     document.getElementById('distance-number').innerText = rawYardage > 0 ? rawYardage : "--"; 
 
-    // Geofencing Auto-Advance
     if (!isPlannerMode) {
         if (rawYardage < 30) { hasReachedGreen = true; }
         if (hasReachedGreen && rawYardage > 60) {
@@ -478,6 +534,9 @@ function processLocation(lat, lng) {
     recommendClub(currentPlaysLike);
     
     if(layupMarker) updateLayupData(layupMarker.getLatLng().lat, layupMarker.getLatLng().lng);
+    
+    // Auto-redraw the club overlay if user moves
+    drawClubOverlay();
 }
 
 function initGPS() {
@@ -577,7 +636,7 @@ document.getElementById('track-btn').addEventListener('click', () => {
         shotStartLat = currentLat; 
         shotStartLng = currentLng;
         
-        // 1. Lock in the Target! (Use Layup Marker if it exists, otherwise use the Pin)
+        // 1. Lock in the Target!
         if (layupMarker) {
             shotTargetLat = layupMarker.getLatLng().lat; 
             shotTargetLng = layupMarker.getLatLng().lng;
@@ -616,17 +675,14 @@ document.getElementById('track-btn').addEventListener('click', () => {
         } else {
             document.getElementById('dispersion-text').style.color = "#e74c3c";
             
-            // If ball is right of target vector
             if (angleDiff > 5 && angleDiff < 175) {
                 autoAccuracy = "Right Rough"; 
                 missText = `Missed ${missDistance} yds Right`;
             } 
-            // If ball is left of target vector
             else if (angleDiff > 185 && angleDiff < 355) {
                 autoAccuracy = "Left Rough"; 
                 missText = `Missed ${missDistance} yds Left`;
             } 
-            // Straight but severely short or long
             else {
                 autoAccuracy = "Short/Long";
                 let intendedDist = calculateDistance(shotStartLat, shotStartLng, shotTargetLat, shotTargetLng);

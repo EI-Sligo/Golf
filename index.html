@@ -72,6 +72,12 @@
             </header>
 
             <div style="position: relative; margin-bottom: 10px;">
+                
+                <!-- NEW: CLUB RANGE OVERLAY DROPDOWN -->
+                <select id="club-overlay-select" style="position: absolute; top: 10px; left: 10px; z-index: 1000; padding: 8px; border-radius: 8px; font-weight: bold; border: 2px solid #3498db; background: rgba(255,255,255,0.95); cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); max-width: 60%;">
+                    <option value="">🎯 Range Overlay: Off</option>
+                </select>
+
                 <div id="map" style="height: 300px; border-radius: 15px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></div>
                 <button id="recenter-map-btn" style="position: absolute; bottom: 15px; right: 15px; z-index: 1000; background: white; border: none; border-radius: 8px; padding: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 1.2rem;">🎯</button>
             </div>
@@ -126,7 +132,6 @@
                     <div id="shot-review-area" style="display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
                         
                         <p style="text-align: center; font-size: 1.2rem; margin-top: 0; margin-bottom: 5px;">Distance: <strong id="pending-distance">0</strong> Yds</p>
-                        <!-- NEW: DISPERSION TEXT -->
                         <p id="dispersion-text" style="text-align: center; font-size: 0.95rem; font-weight: bold; margin-top: 0; margin-bottom: 15px;"></p>
                         
                         <label>Club:</label><select id="club-select" style="margin-bottom: 10px;"></select>
