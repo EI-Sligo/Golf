@@ -23,7 +23,7 @@ body {
     color: var(--text-main);
     margin: 0;
     padding: 0;
-    padding-bottom: 80px; /* Room for bottom nav */
+    padding-bottom: 80px; 
     -webkit-font-smoothing: antialiased;
 }
 
@@ -73,9 +73,7 @@ body {
     animation: fadeIn 0.4s ease;
 }
 
-.view-section.active {
-    display: block;
-}
+.view-section.active { display: block; }
 
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
@@ -101,61 +99,86 @@ body {
 }
 
 /* ==========================================
-   TYPOGRAPHY & DATA DISPLAYS
+   HOLE HEADER NAVIGATION
 ========================================== */
-.yardage {
-    font-size: 4rem;
-    font-weight: 800;
-    color: var(--text-main);
-    letter-spacing: -2px;
+.hole-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    margin-bottom: 15px;
 }
 
-.yardage .unit {
-    font-size: 1.5rem;
+.nav-arrow-btn {
+    background: #e0e6ed;
+    color: var(--text-main);
+    border: none;
+    padding: 10px 16px;
+    border-radius: 20px;
     font-weight: 600;
-    color: var(--text-muted);
-    margin-left: 5px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: background 0.2s;
 }
+
+.nav-arrow-btn:active { background: #cbd4dd; }
+
+/* ==========================================
+   BAG BUILDER & SETTINGS UI
+========================================== */
+.setting-group { margin-bottom: 15px; }
+.setting-group label { display: block; font-weight: 600; margin-bottom: 5px; color: #555; }
+.setting-group input, .setting-group select {
+    width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; box-sizing: border-box;
+}
+
+.add-club-row { display: flex; gap: 10px; margin-bottom: 15px; }
+.add-club-row select { flex: 2; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; }
+.add-club-row button { flex: 1; padding: 10px; }
+
+.bag-list { display: flex; flex-direction: column; gap: 8px; }
+
+.club-tag {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+    padding: 12px 15px;
+    border-radius: 10px;
+    border: 1px solid #e1e8ed;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.club-tag-actions button {
+    border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; margin-left: 5px;
+}
+.archive-btn { background: var(--accent-gold); color: white; }
+.delete-btn { background: var(--danger-red); color: white; }
+
+/* ==========================================
+   TYPOGRAPHY & DATA DISPLAYS
+========================================== */
+.yardage { font-size: 4rem; font-weight: 800; color: var(--text-main); letter-spacing: -2px; }
+.yardage .unit { font-size: 1.5rem; font-weight: 600; color: var(--text-muted); margin-left: 5px; }
 
 .plays-like-box {
     background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
-    padding: 15px;
-    border-radius: 12px;
-    margin-top: 15px;
-    border-left: 5px solid var(--accent-gold);
+    padding: 15px; border-radius: 12px; margin-top: 15px; border-left: 5px solid var(--accent-gold);
 }
 
 /* ==========================================
    BUTTONS
 ========================================== */
-button {
-    font-family: 'Inter', sans-serif;
-    border-radius: 12px;
-    transition: all 0.2s ease;
-}
-
-button:active {
-    transform: scale(0.96);
-}
+button { font-family: 'Inter', sans-serif; border-radius: 12px; transition: all 0.2s ease; cursor: pointer; }
+button:active { transform: scale(0.96); }
 
 .primary-btn {
-    width: 100%;
-    background: var(--primary-green);
-    color: white;
-    border: none;
-    padding: 15px;
-    font-size: 1.2rem;
-    font-weight: 800;
-    box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+    width: 100%; background: var(--primary-green); color: white; border: none; padding: 15px; font-size: 1.2rem; font-weight: 800; box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
 }
 
-.action-btn {
-    padding: 12px;
-    font-weight: 600;
-    border: none;
-    width: 100%;
-}
-
+.action-btn { padding: 12px; font-weight: 600; border: none; width: 100%; }
 .blue-btn { background: var(--accent-blue); color: white; }
 .gray-btn { background: #e0e6ed; color: var(--text-main); }
 .red-btn { background: var(--danger-red); color: white; }
@@ -163,48 +186,12 @@ button:active {
 /* ==========================================
    GRID LAYOUTS
 ========================================== */
-.score-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 15px;
-    text-align: center;
-}
-
+.score-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; text-align: center; }
 .score-grid input[type="number"] {
-    width: 100%;
-    padding: 10px;
-    font-size: 1.5rem;
-    font-weight: bold;
-    text-align: center;
-    border: 2px solid #eee;
-    border-radius: 8px;
-    box-sizing: border-box;
+    width: 100%; padding: 10px; font-size: 1.5rem; font-weight: bold; text-align: center; border: 2px solid #eee; border-radius: 8px; box-sizing: border-box;
 }
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
-}
-
-.stat-box {
-    background: #f9fbfd;
-    padding: 15px;
-    border-radius: 12px;
-    text-align: center;
-    border: 1px solid #eee;
-}
-
-.stat-box span {
-    display: block;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    font-weight: 600;
-    margin-bottom: 5px;
-}
-
-.stat-box strong {
-    font-size: 1.8rem;
-    color: var(--text-main);
-}
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.stat-box { background: #f9fbfd; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #eee; }
+.stat-box span { display: block; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 5px; }
+.stat-box strong { font-size: 1.8rem; color: var(--text-main); }

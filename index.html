@@ -28,11 +28,11 @@
     <main id="view-play" class="view-section active">
         
         <!-- START SCREEN -->
-        <div id="start-round-screen" style="text-align: center; padding: 40px 20px;">
+        <div id="start-round-screen" style="text-align: center; padding: 20px 10px;">
             <h1 style="color: #2c3e50; font-size: 2.5rem; margin-bottom: 5px;">Castle Dargan</h1>
-            <p style="color: #7f8c8d; margin-top: 0; margin-bottom: 30px;">18 Holes</p>
+            <p style="color: #7f8c8d; margin-top: 0; margin-bottom: 20px;">18 Holes</p>
             
-            <div style="margin-bottom: 20px; text-align: left;">
+            <div class="card" style="text-align: left; margin-bottom: 20px;">
                 <label style="font-weight: bold; color: #555;">Select Tee Box:</label>
                 <select id="tee-box-select" style="margin-top: 5px; border: 2px solid #ccc; width: 100%; padding: 10px; font-size: 1rem; border-radius: 8px;">
                     <option value="blue">Blue Tees (Competition)</option>
@@ -40,6 +40,32 @@
                     <option value="green">Green Tees (Seniors)</option>
                     <option value="red">Red Tees (Ladies')</option>
                 </select>
+            </div>
+
+            <!-- MULTIPLAYER PARTNERS -->
+            <div class="card" style="text-align: left; margin-bottom: 20px;">
+                <label style="font-weight: bold; color: #555; display:block; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">Playing Partners</label>
+                
+                <div style="display:flex; align-items:center; margin-bottom:10px;">
+                    <span style="font-weight:bold; color:#27ae60; width:30px;">A</span>
+                    <input type="text" value="Me" disabled style="flex:2; padding:8px; border:1px solid #ccc; border-radius:5px; background:#f9f9f9;">
+                    <input type="number" id="player-a-hcp" value="18" style="flex:1; margin-left:10px; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;">
+                </div>
+                <div style="display:flex; align-items:center; margin-bottom:10px;">
+                    <span style="font-weight:bold; color:#3498db; width:30px;">B</span>
+                    <input type="text" id="player-b-name" placeholder="Player B Name" style="flex:2; padding:8px; border:1px solid #ccc; border-radius:5px;">
+                    <input type="number" id="player-b-hcp" placeholder="Hcp" style="flex:1; margin-left:10px; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;">
+                </div>
+                <div style="display:flex; align-items:center; margin-bottom:10px;">
+                    <span style="font-weight:bold; color:#9b59b6; width:30px;">C</span>
+                    <input type="text" id="player-c-name" placeholder="Player C Name" style="flex:2; padding:8px; border:1px solid #ccc; border-radius:5px;">
+                    <input type="number" id="player-c-hcp" placeholder="Hcp" style="flex:1; margin-left:10px; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;">
+                </div>
+                <div style="display:flex; align-items:center;">
+                    <span style="font-weight:bold; color:#e67e22; width:30px;">D</span>
+                    <input type="text" id="player-d-name" placeholder="Player D Name" style="flex:2; padding:8px; border:1px solid #ccc; border-radius:5px;">
+                    <input type="number" id="player-d-hcp" placeholder="Hcp" style="flex:1; margin-left:10px; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;">
+                </div>
             </div>
 
             <button id="begin-round-btn" class="primary-btn" style="padding: 20px; font-size: 1.3rem;">Start Live Round</button>
@@ -60,24 +86,20 @@
                 </div>
             </div>
 
-            <header>
-                <div class="hole-navigation">
-                    <button id="prev-hole">&lt; Prev</button>
-                    <div style="text-align: center;">
-                        <h2 id="current-hole" style="margin: 0;">Hole 1</h2>
-                        <span id="hole-par-display" style="color: #27ae60; font-weight: bold; font-size: 0.9rem;">Par 4 | SI 8</span>
-                    </div>
-                    <button id="next-hole">Next &gt;</button>
+            <!-- CLEANED UP HOLE NAVIGATION -->
+            <header class="hole-navigation">
+                <button id="prev-hole" class="nav-arrow-btn">&larr; Prev</button>
+                <div style="text-align: center;">
+                    <h2 id="current-hole" style="margin: 0; font-size: 1.8rem; color: var(--text-main);">Hole 1</h2>
+                    <span id="hole-par-display" style="color: var(--primary-green); font-weight: 800; font-size: 0.95rem;">Par 4 | SI 8 | 400y</span>
                 </div>
+                <button id="next-hole" class="nav-arrow-btn">Next &rarr;</button>
             </header>
 
             <div style="position: relative; margin-bottom: 10px;">
-                
-                <!-- CLUB RANGE OVERLAY DROPDOWN -->
                 <select id="club-overlay-select" style="position: absolute; top: 10px; left: 10px; z-index: 1000; padding: 8px; border-radius: 8px; font-weight: bold; border: 2px solid #3498db; background: rgba(255,255,255,0.95); cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); max-width: 60%;">
                     <option value="">🎯 Range Overlay: Off</option>
                 </select>
-
                 <div id="map" style="height: 300px; border-radius: 15px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></div>
                 <button id="recenter-map-btn" style="position: absolute; bottom: 15px; right: 15px; z-index: 1000; background: white; border: none; border-radius: 8px; padding: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 1.2rem;">🎯</button>
             </div>
@@ -120,7 +142,6 @@
                     <p>Caddy: <strong id="recommended-club">Calculating...</strong></p>
                 </div>
                 
-                <!-- REFORMATTED PIN & TEE CONTROLS -->
                 <div class="pin-controls" style="margin-top: 15px;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
                         <button id="update-tee-btn" class="action-btn" style="background-color: #27ae60; color: white;">Set Tee Here</button>
@@ -139,9 +160,9 @@
                         <p style="text-align: center; font-size: 1.2rem; margin-top: 0; margin-bottom: 5px;">Distance: <strong id="pending-distance">0</strong> Yds</p>
                         <p id="dispersion-text" style="text-align: center; font-size: 0.95rem; font-weight: bold; margin-top: 0; margin-bottom: 15px;"></p>
                         
-                        <label>Club:</label><select id="club-select" style="margin-bottom: 10px;"></select>
+                        <label>Club:</label><select id="club-select" style="margin-bottom: 10px; width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;"></select>
                         <label>Accuracy:</label>
-                        <select id="accuracy-select">
+                        <select id="accuracy-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc;">
                             <option value="Fairway">Fairway / Target</option>
                             <option value="Left Rough">Left Miss (Rough/Hazard)</option>
                             <option value="Right Rough">Right Miss (Rough/Hazard)</option>
@@ -150,27 +171,26 @@
                         </select>
                         <div class="pin-controls" style="margin-top: 15px;">
                             <button id="save-shot-btn" class="action-btn blue-btn">Save</button>
-                            <button id="ignore-shot-btn" class="action-btn red-btn">Ignore</button>
+                            <button id="ignore-shot-btn" class="action-btn red-btn" style="margin-top: 10px;">Ignore</button>
                         </div>
                     </div>
                 </div>
             </section>
 
+            <!-- MULTIPLAYER DYNAMIC SCORECARD -->
             <section class="scorecard card">
-                <h3>Score - Hole <span id="scorecard-hole-num">1</span></h3>
-                <div class="score-grid">
-                    <div><label>Strokes</label><input type="number" id="hole-strokes" min="1" max="15"></div>
-                    <div><label>Putts</label><input type="number" id="hole-putts" min="0" max="10"></div>
-                    <div style="display: flex; align-items: center; justify-content: center; flex-direction: column;">
-                        <label>GIR</label><input type="checkbox" id="hole-gir" style="width: 25px; height: 25px;">
-                    </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h3 style="margin:0; border:none; padding:0;">Score - Hole <span id="scorecard-hole-num">1</span></h3>
+                    <button id="save-score-btn" class="action-btn blue-btn" style="width:auto; padding:8px 20px;">Save</button>
                 </div>
-                <p style="text-align: center; font-weight: bold; color: #3498db; margin: 10px 0 0 0;">Points: <span id="hole-points-display">0</span></p>
-                <button id="save-score-btn" class="primary-btn" style="margin-top: 15px; background-color: #2c3e50;">Save Score</button>
+                
+                <div id="multiplayer-scorecard-wrapper" style="border-top: 2px solid #f0f0f0;">
+                    <!-- JS Injected Player Rows Go Here -->
+                </div>
             </section>
 
             <section class="analytics card">
-                <h3>Live Round Stats</h3>
+                <h3>Live Round Stats (Me)</h3>
                 <div class="stats-grid">
                     <div class="stat-box"><span>To Par</span><strong id="stat-score">E</strong></div>
                     <div class="stat-box"><span>Pts</span><strong id="stat-points" style="color: #3498db;">0</strong></div>
@@ -179,7 +199,10 @@
                 </div>
             </section>
 
-            <button id="end-round-btn" class="primary-btn" style="background-color: #e74c3c; margin-bottom: 30px;">End Round & Save</button>
+            <div style="display:flex; gap:10px; margin-bottom:30px;">
+                <button id="end-round-btn" class="primary-btn" style="background-color: #27ae60;">End & Save Round</button>
+                <button id="quit-round-btn" class="action-btn gray-btn" style="flex:0.5; background-color: #e74c3c; color: white;">Quit</button>
+            </div>
         </div>
     </main>
 
@@ -190,7 +213,7 @@
     </div>
 
     <!-- ========================================== -->
-    <!-- VIEW: HISTORY -->
+    <!-- VIEW: HISTORY & SHOT TRACER MODAL -->
     <!-- ========================================== -->
     <main id="view-history" class="view-section">
         <section class="card">
@@ -199,7 +222,6 @@
         </section>
         <section class="card" style="text-align: center;">
             <h3 style="margin-top: 0; color: #2c3e50;">Driving Tendencies</h3>
-            <p style="font-size: 0.85rem; color: #7f8c8d; margin-top: -10px;">Where do your woods & drivers miss?</p>
             <canvas id="missTendencyChart" style="max-height: 200px; margin: 0 auto;"></canvas>
         </section>
         <section class="card">
@@ -208,21 +230,27 @@
         </section>
     </main>
 
+    <!-- FULLSCREEN SHOT TRACER MODAL -->
+    <div id="tracer-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:10000; padding:20px; box-sizing:border-box;">
+        <div style="background:#fff; width:100%; height:100%; border-radius:15px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div style="padding:15px 20px; display:flex; justify-content:space-between; align-items:center; background:#2c3e50; color:#fff;">
+                <h3 style="margin:0; font-size: 1.2rem;">Visual Shot Tracer</h3>
+                <button onclick="document.getElementById('tracer-modal').style.display='none';" style="background:none; border:none; color:#fff; font-size:2rem; cursor:pointer; line-height: 0.8;">&times;</button>
+            </div>
+            <div id="history-map" style="flex:1; width:100%;"></div>
+        </div>
+    </div>
+
     <!-- ========================================== -->
     <!-- VIEW: SETTINGS -->
     <!-- ========================================== -->
     <main id="view-settings" class="view-section">
         <section class="settings card" style="border: 2px solid #e74c3c;">
             <h3 style="color: #e74c3c; margin-top: 0;">Manage Tracked Shots</h3>
-            <p style="font-size: 0.85rem; color: #555; margin-top: 0;">Delete bad data (like 0-yard misclicks) to instantly fix your Caddy averages.</p>
             <div id="tracked-shots-list" style="max-height: 250px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 10px;"></div>
         </section>
         <section class="settings card">
             <h3>Player Profile</h3>
-            <div class="setting-group">
-                <label>Playing Handicap:</label>
-                <input type="number" id="playing-handicap" value="18" min="0" max="54">
-            </div>
             <div class="setting-group">
                 <label>Baseline Yardages:</label>
                 <select id="handicap-select">
@@ -232,8 +260,11 @@
                 </select>
             </div>
         </section>
+        
+        <!-- REFORMATTED BAG BUILDER -->
         <section class="settings card">
-            <h3>Bag Builder</h3>
+            <h3>Bag Builder & Archiving</h3>
+            <p style="font-size: 0.85rem; color: #555; margin-top: 0; margin-bottom: 15px;">Tap 🗄️ to Archive a club. It saves history but resets your current Caddy averages.</p>
             <div class="add-club-row">
                 <select id="new-club-select">
                     <option value="Driver">Driver</option><option value="3 Wood">3 Wood</option><option value="5 Wood">5 Wood</option>
@@ -246,8 +277,9 @@
                 <button id="add-club-btn" class="action-btn blue-btn">Add</button>
             </div>
             <div id="my-bag-list" class="bag-list"></div>
-            <button id="reset-bag-btn" style="margin-top: 10px; font-size: 0.8rem; color: #e74c3c; background: none; border: none; text-decoration: underline; cursor: pointer;">Reset Bag</button>
+            <button id="reset-bag-btn" style="margin-top: 15px; font-size: 0.8rem; color: #e74c3c; background: none; border: none; text-decoration: underline; cursor: pointer; padding: 0;">Reset Default Bag</button>
         </section>
+        
         <section class="settings card">
             <h3>Data Backup</h3>
             <div style="display: flex; gap: 10px; margin-top: 15px;">
