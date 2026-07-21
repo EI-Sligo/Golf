@@ -1,4 +1,4 @@
-const CACHE_NAME = 'caddy-app-cache-v2';
+const CACHE_NAME = 'caddy-app-cache-v3';
 const MAP_CACHE = 'caddy-map-tiles-v1';
 
 const urlsToCache = [
@@ -12,51 +12,55 @@ const urlsToCache = [
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
-// Install Event: Cache Core App Files
+// Install Event: Activate new service worker immediately
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
   );
-  self.skipWaiting();
 });
 
-// Activate Event: Cleanup old caches
+// Activate Event: Purge old cached app code immediately
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.filter(name => name !== CACHE_NAME && name !== MAP_CACHE)
-                  .map(name => caches.delete(name))
-      );
-    })
+    caches.keys().then(keys => Promise.all(
+      keys.map(key => {
+        if (key !== CACHE_NAME && key !== MAP_CACHE) {
+          return caches.delete(key);
+        }
+      })
+    )).then(() => self.clients.claim())
   );
 });
 
-// Fetch Event: The Offline Engine
+// Fetch Event: Network-First for Code, Cache-First for Map Tiles
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  
-  // 1. Intercept ESRI Satellite Map Tiles and save them offline!
+
+  // 1. Map Tiles: Serve from cache offline
   if (url.hostname === 'server.arcgisonline.com') {
     event.respondWith(
       caches.open(MAP_CACHE).then(cache => {
         return cache.match(event.request).then(response => {
-          if (response) return response; // Serve map tile from offline cache
-          
-          return fetch(event.request).then(networkResponse => {
-            cache.put(event.request, networkResponse.clone()); // Save new tile to offline cache
-            return networkResponse;
-          }).catch(() => {
-             // If completely offline and tile isn't saved, fail gracefully
-          });
+          if (response) return response;
+          return fetch(event.request).then(netRes => {
+            cache.put(event.request, netRes.clone());
+            return netRes;
+          }).catch(() => {});
         });
       })
     );
     return;
   }
 
-  // 2. Normal App Files (Cache First Strategy)
+  // 2. Code Files: Check network FIRST so updates show up, fallback to offline cache if no service
   event.respondWith(
-    caches.match(event.request).then(response => response || fetch(event.request))
+    fetch(event.request).then(networkResponse => {
+      if (networkResponse && networkResponse.status === 200) {
+        const resClone = networkResponse.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+      }
+      return networkResponse;
+    }).catch(() => caches.match(event.request))
   );
 });
