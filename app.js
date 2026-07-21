@@ -20,8 +20,6 @@ let hasReachedGreen = false;
 let toastTimeout = null;
 let activePlayers = []; 
 
-// NEW: The Self-Healing JSON Engine
-// This prevents the app from crashing if LocalStorage gets corrupted
 function safeParse(key, fallback) {
     try {
         const item = localStorage.getItem(key);
@@ -34,7 +32,6 @@ function safeParse(key, fallback) {
     }
 }
 
-// The Official Scorecard Data
 const courseData = [
     { hole: 1, lat: 54.19860260754416, lng: -8.430412853346407, par: 4, si: 9, redPar: 4, redSi: 13, yds: { blue: 406, white: 379, green: 370, red: 337 }, bearing: 80 },
     { hole: 2, lat: 54.200161814306895, lng: -8.424006844479758, par: 4, si: 3, redPar: 5, redSi: 11, yds: { blue: 507, white: 452, green: 444, red: 423 }, bearing: 250 },
@@ -87,7 +84,7 @@ const defaultBag = ["Driver", "3 Wood", "4 Hybrid", "5 Iron", "7 Iron", "8 Iron"
 const masterClubOrder = ["Driver", "3 Wood", "5 Wood", "4 Hybrid", "5 Hybrid", "4 Iron", "5 Iron", "6 Iron", "7 Iron", "8 Iron", "9 Iron", "PW", "GW", "SW", "Putter"];
 
 function sortBag(bagArray) {
-    if(!Array.isArray(bagArray)) return defaultBag; // Failsafe
+    if(!Array.isArray(bagArray)) return defaultBag; 
     return bagArray.sort((a, b) => {
         let idxA = masterClubOrder.indexOf(a); 
         let idxB = masterClubOrder.indexOf(b);
@@ -151,7 +148,6 @@ document.getElementById('exit-planner-btn').addEventListener('click', () => {
     document.getElementById('start-round-screen').style.display = 'block';
 });
 
-// Quit Button logic
 document.getElementById('quit-round-btn').addEventListener('click', () => {
     if(confirm("Are you sure you want to quit? This round and its tracked shots will NOT be saved.")) {
         localStorage.removeItem('castleDarganScorecard');
@@ -307,7 +303,6 @@ window.deleteShot = function(originalIdx) {
     }
 }
 
-// FIXED IMPORT/EXPORT ENGINE TO PREVENT [object Object] CORRUPTION
 document.getElementById('export-btn').addEventListener('click', () => {
     const backupData = { 
         shots: safeParse('castleDarganShots', []), 
@@ -336,7 +331,6 @@ document.getElementById('import-file').addEventListener('change', (e) => {
         try {
             const data = JSON.parse(e.target.result);
             
-            // Ensure complex objects are stringified before setting to localStorage
             if (data.shots) localStorage.setItem('castleDarganShots', JSON.stringify(data.shots)); 
             if (data.scorecard) localStorage.setItem('castleDarganScorecard', JSON.stringify(data.scorecard));
             if (data.bag) localStorage.setItem('castleDarganBag', JSON.stringify(data.bag)); 
@@ -950,20 +944,28 @@ function renderMultiplayerScorecard() {
         let color = p.id === 'A' ? '#27ae60' : p.id === 'B' ? '#3498db' : p.id === 'C' ? '#9b59b6' : '#e67e22';
 
         html += `
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding:10px 0;">
-            <div style="flex:2; font-weight:bold; color:#2c3e50;"><span style="color:${color}; margin-right:5px;">${p.id}</span>${p.name} <span style="font-size:0.7rem; color:#7f8c8d;">(Hcp ${p.hcp})</span></div>
-            <div style="flex:1;"><input type="number" id="strokes-${p.id}" value="${strokes}" placeholder="Strokes" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;" oninput="updatePlayerScore('${p.id}', ${p.hcp}, ${activePar}, ${activeSi})"></div>
-            <div style="flex:1; text-align:right; font-weight:bold; color:#3498db;" id="pts-${p.id}">${pts} Pts</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding:10px 0; gap:8px;">
+            <div style="flex:2; font-weight:bold; color:#2c3e50; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                <span style="color:${color}; margin-right:5px;">${p.id}</span>${p.name} <span style="font-size:0.7rem; color:#7f8c8d;">(Hcp ${p.hcp})</span>
+            </div>
+            <div style="flex:1; min-width:0;">
+                <input type="number" id="strokes-${p.id}" value="${strokes}" placeholder="Strokes" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing:border-box;" oninput="updatePlayerScore('${p.id}', ${p.hcp}, ${activePar}, ${activeSi})">
+            </div>
+            <div style="flex:1; min-width:0; text-align:right; font-weight:bold; color:#3498db; white-space:nowrap;" id="pts-${p.id}">${pts} Pts</div>
         </div>`;
 
         if (p.id === 'A') {
              let putts = holeData[p.id]?.putts || '';
              let gir = holeData[p.id]?.gir ? 'checked' : '';
              html += `
-             <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:2px solid #ccc; margin-bottom:10px; background:#f9f9f9;">
-                <div style="flex:2; font-size:0.85rem; color:#7f8c8d; text-align:right; padding-right:10px;">My Putts/GIR:</div>
-                <div style="flex:1;"><input type="number" id="putts-A" value="${putts}" placeholder="Putts" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;" oninput="updatePlayerScore('A', ${p.hcp}, ${activePar}, ${activeSi})"></div>
-                <div style="flex:1; text-align:center;"><input type="checkbox" id="gir-A" ${gir} style="width:25px; height:25px;"></div>
+             <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:2px solid #ccc; margin-bottom:10px; background:#f9f9f9; gap:8px;">
+                <div style="flex:2; font-size:0.85rem; color:#7f8c8d; text-align:right; min-width:0;">My Putts/GIR:</div>
+                <div style="flex:1; min-width:0;">
+                    <input type="number" id="putts-A" value="${putts}" placeholder="Putts" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing:border-box;" oninput="updatePlayerScore('A', ${p.hcp}, ${activePar}, ${activeSi})">
+                </div>
+                <div style="flex:1; text-align:center; min-width:0;">
+                    <input type="checkbox" id="gir-A" ${gir} style="width:25px; height:25px;">
+                </div>
              </div>`;
         }
     });

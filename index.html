@@ -46,25 +46,25 @@
             <div class="card" style="text-align: left; margin-bottom: 20px;">
                 <label style="font-weight: bold; color: #555; display:block; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">Playing Partners</label>
                 
-                <div style="display:flex; align-items:center; margin-bottom:10px;">
-                    <span style="font-weight:bold; color:#27ae60; width:30px;">A</span>
-                    <input type="text" value="Me" disabled style="flex:2; padding:8px; border:1px solid #ccc; border-radius:5px; background:#f9f9f9;">
-                    <input type="number" id="player-a-hcp" value="18" style="flex:1; margin-left:10px; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;">
+                <div style="display:flex; align-items:center; margin-bottom:10px; gap: 8px;">
+                    <span style="font-weight:bold; color:#27ae60; width:20px; text-align: center;">A</span>
+                    <input type="text" value="Me" disabled style="flex:2; min-width: 0; width: 100%; padding:8px; border:1px solid #ccc; border-radius:5px; background:#f9f9f9; box-sizing: border-box;">
+                    <input type="number" id="player-a-hcp" value="18" placeholder="Hcp" style="flex:1; min-width: 0; width: 100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing: border-box;">
                 </div>
-                <div style="display:flex; align-items:center; margin-bottom:10px;">
-                    <span style="font-weight:bold; color:#3498db; width:30px;">B</span>
-                    <input type="text" id="player-b-name" placeholder="Player B Name" style="flex:2; padding:8px; border:1px solid #ccc; border-radius:5px;">
-                    <input type="number" id="player-b-hcp" placeholder="Hcp" style="flex:1; margin-left:10px; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;">
+                <div style="display:flex; align-items:center; margin-bottom:10px; gap: 8px;">
+                    <span style="font-weight:bold; color:#3498db; width:20px; text-align: center;">B</span>
+                    <input type="text" id="player-b-name" placeholder="Player B Name" style="flex:2; min-width: 0; width: 100%; padding:8px; border:1px solid #ccc; border-radius:5px; box-sizing: border-box;">
+                    <input type="number" id="player-b-hcp" placeholder="Hcp" style="flex:1; min-width: 0; width: 100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing: border-box;">
                 </div>
-                <div style="display:flex; align-items:center; margin-bottom:10px;">
-                    <span style="font-weight:bold; color:#9b59b6; width:30px;">C</span>
-                    <input type="text" id="player-c-name" placeholder="Player C Name" style="flex:2; padding:8px; border:1px solid #ccc; border-radius:5px;">
-                    <input type="number" id="player-c-hcp" placeholder="Hcp" style="flex:1; margin-left:10px; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;">
+                <div style="display:flex; align-items:center; margin-bottom:10px; gap: 8px;">
+                    <span style="font-weight:bold; color:#9b59b6; width:20px; text-align: center;">C</span>
+                    <input type="text" id="player-c-name" placeholder="Player C Name" style="flex:2; min-width: 0; width: 100%; padding:8px; border:1px solid #ccc; border-radius:5px; box-sizing: border-box;">
+                    <input type="number" id="player-c-hcp" placeholder="Hcp" style="flex:1; min-width: 0; width: 100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing: border-box;">
                 </div>
-                <div style="display:flex; align-items:center;">
-                    <span style="font-weight:bold; color:#e67e22; width:30px;">D</span>
-                    <input type="text" id="player-d-name" placeholder="Player D Name" style="flex:2; padding:8px; border:1px solid #ccc; border-radius:5px;">
-                    <input type="number" id="player-d-hcp" placeholder="Hcp" style="flex:1; margin-left:10px; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center;">
+                <div style="display:flex; align-items:center; gap: 8px;">
+                    <span style="font-weight:bold; color:#e67e22; width:20px; text-align: center;">D</span>
+                    <input type="text" id="player-d-name" placeholder="Player D Name" style="flex:2; min-width: 0; width: 100%; padding:8px; border:1px solid #ccc; border-radius:5px; box-sizing: border-box;">
+                    <input type="number" id="player-d-hcp" placeholder="Hcp" style="flex:1; min-width: 0; width: 100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing: border-box;">
                 </div>
             </div>
 
@@ -86,7 +86,6 @@
                 </div>
             </div>
 
-            <!-- CLEANED UP HOLE NAVIGATION -->
             <header class="hole-navigation">
                 <button id="prev-hole" class="nav-arrow-btn">&larr; Prev</button>
                 <div style="text-align: center;">
@@ -261,7 +260,7 @@
             </div>
         </section>
         
-        <!-- REFORMATTED BAG BUILDER -->
+        <!-- BAG BUILDER -->
         <section class="settings card">
             <h3>Bag Builder & Archiving</h3>
             <p style="font-size: 0.85rem; color: #555; margin-top: 0; margin-bottom: 15px;">Tap 🗄️ to Archive a club. It saves history but resets your current Caddy averages.</p>
