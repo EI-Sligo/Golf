@@ -6,8 +6,11 @@ let isTrackingShot = false, shotStartLat = null, shotStartLng = null, pendingDis
 let shotTargetLat = null, shotTargetLng = null; 
 
 let map, userMarker, pinMarker, pathLine;
-let layupMarkers = []; 
-let plannedClubs = []; 
+
+// Separation of Active and Planned Map Elements
+let liveTargetMarker = null; 
+let passiveRouteGroup = null; 
+let plannerRouteGroup = null; 
 
 let yellowLayupIcon = null; 
 let clubOverlayGroup = null; 
@@ -117,8 +120,10 @@ function startUI() {
 }
 
 document.getElementById('begin-round-btn').addEventListener('click', () => {
-    localStorage.removeItem('castleDarganScorecard'); localStorage.removeItem('castleDarganActiveRoundShots'); 
-    initPlayers(); isPlannerMode = false; document.getElementById('planner-banner').style.display = 'none';
+    localStorage.removeItem('castleDarganScorecard');
+    localStorage.removeItem('castleDarganActiveRoundShots'); 
+    initPlayers();
+    isPlannerMode = false; document.getElementById('planner-banner').style.display = 'none';
     startUI(); initGPS();
 });
 
@@ -129,18 +134,24 @@ document.getElementById('resume-round-btn').addEventListener('click', () => {
 });
 
 document.getElementById('plan-round-btn').addEventListener('click', () => {
-    initPlayers(); isPlannerMode = true; document.getElementById('planner-banner').style.display = 'block';
-    if(gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId); startUI(); 
+    initPlayers();
+    isPlannerMode = true; document.getElementById('planner-banner').style.display = 'block';
+    if(gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+    startUI(); 
 });
 
 document.getElementById('exit-planner-btn').addEventListener('click', () => {
-    document.getElementById('active-round-ui').style.display = 'none'; document.getElementById('start-round-screen').style.display = 'block';
+    document.getElementById('active-round-ui').style.display = 'none';
+    document.getElementById('start-round-screen').style.display = 'block';
 });
 
 document.getElementById('quit-round-btn').addEventListener('click', () => {
     if(confirm("Are you sure you want to quit? This round and its tracked shots will NOT be saved.")) {
-        localStorage.removeItem('castleDarganScorecard'); localStorage.removeItem('castleDarganActiveRoundShots');
-        document.getElementById('active-round-ui').style.display = 'none'; document.getElementById('start-round-screen').style.display = 'block'; document.getElementById('resume-round-btn').style.display = 'none';
+        localStorage.removeItem('castleDarganScorecard');
+        localStorage.removeItem('castleDarganActiveRoundShots');
+        document.getElementById('active-round-ui').style.display = 'none';
+        document.getElementById('start-round-screen').style.display = 'block';
+        document.getElementById('resume-round-btn').style.display = 'none';
         if(gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
     }
 });
@@ -175,14 +186,27 @@ function switchTab(t) {
 function getBag() { return sortBag(safeParse('castleDarganBag', defaultBag)); }
 
 function saveBag(bag) { 
-    localStorage.setItem('castleDarganBag', JSON.stringify(sortBag(bag))); renderBagUI(); 
-    if (isPlannerMode) renderShotPlanner(); 
+    localStorage.setItem('castleDarganBag', JSON.stringify(sortBag(bag))); 
+    renderBagUI(); 
+    if (isPlannerMode) renderPlannerUI(); 
 }
 
 function renderBagUI() {
     const bag = getBag();
+    const overlaySelect = document.getElementById('club-overlay-select'); const currentOverlay = overlaySelect.value;
+    overlaySelect.innerHTML = '<option value="">🎯 Range Overlay: Off</option>' + bag.map(c => `<option value="${c}">${c}</option>`).join('');
+    overlaySelect.value = currentOverlay;
+
     document.getElementById('club-select').innerHTML = '<option value="">Select...</option>' + bag.map(c => `<option value="${c}">${c}</option>`).join('');
-    document.getElementById('my-bag-list').innerHTML = bag.map(c => `<div class="club-tag"><span>${c}</span><div class="club-tag-actions"><button class="archive-btn" onclick="archiveClub('${c}')" title="Archive Stats">🗄️</button><button class="delete-btn" onclick="removeClub('${c}')" title="Delete Club">&times;</button></div></div>`).join('');
+    
+    document.getElementById('my-bag-list').innerHTML = bag.map(c => `
+        <div class="club-tag">
+            <span>${c}</span>
+            <div class="club-tag-actions">
+                <button class="archive-btn" onclick="archiveClub('${c}')" title="Archive Stats">🗄️</button>
+                <button class="delete-btn" onclick="removeClub('${c}')" title="Delete Club">&times;</button>
+            </div>
+        </div>`).join('');
 }
 
 window.removeClub = function(c) { saveBag(getBag().filter(b => b !== c)); }
@@ -195,6 +219,7 @@ window.archiveClub = function(clubName) {
         updateAnalytics(); renderShotsList(); alert(`${clubName} stats archived successfully.`);
     }
 }
+
 document.getElementById('add-club-btn').addEventListener('click', () => { 
     let bag = getBag(); let nc = document.getElementById('new-club-select').value; 
     if(!bag.includes(nc)) { bag.push(nc); saveBag(bag); }
@@ -204,8 +229,9 @@ document.getElementById('reset-bag-btn').addEventListener('click', () => saveBag
 const handicapSelect = document.getElementById('handicap-select'); handicapSelect.value = localStorage.getItem('castleDarganHandicap') || "High";
 handicapSelect.addEventListener('change', (e) => { 
     localStorage.setItem('castleDarganHandicap', e.target.value); 
-    recommendClub(currentPlaysLike || parseInt(document.getElementById('distance-number').innerText)); 
-    if(isPlannerMode) renderShotPlanner();
+    if(!isPlannerMode && currentPlaysLike) recommendClub(currentPlaysLike); 
+    if(isPlannerMode) renderPlannerUI();
+    if(!isPlannerMode) drawClubOverlay(); 
 });
 
 function renderShotsList() {
@@ -214,19 +240,33 @@ function renderShotsList() {
     listEl.innerHTML = '';
     [...shots].reverse().forEach((s, reversedIdx) => {
         const originalIdx = shots.length - 1 - reversedIdx; 
-        listEl.innerHTML += `<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 10px 0;"><div><strong style="color: #2c3e50;">${s.club}</strong> - <span style="color: #27ae60; font-weight: bold;">${s.distance} Yds</span><br><span style="font-size: 0.8rem; color: #7f8c8d;">${s.accuracy || 'Fairway'} | Hole ${s.hole || '?'}</span></div><button onclick="deleteShot(${originalIdx})" style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 1.2rem;">🗑️</button></div>`;
+        listEl.innerHTML += `
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 10px 0;">
+                <div>
+                    <strong style="color: #2c3e50;">${s.club}</strong> - <span style="color: #27ae60; font-weight: bold;">${s.distance} Yds</span><br>
+                    <span style="font-size: 0.8rem; color: #7f8c8d;">${s.accuracy || 'Fairway'} | Hole ${s.hole || '?'}</span>
+                </div>
+                <button onclick="deleteShot(${originalIdx})" style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 1.2rem;">🗑️</button>
+            </div>`;
     });
 }
 
 window.deleteShot = function(originalIdx) {
     if (confirm("Delete this shot permanently?")) {
-        let shots = safeParse('castleDarganShots', []); shots.splice(originalIdx, 1); localStorage.setItem('castleDarganShots', JSON.stringify(shots));
-        renderShotsList(); updateAnalytics(); if(currentPlaysLike) recommendClub(currentPlaysLike); if(isPlannerMode) renderShotPlanner();
+        let shots = safeParse('castleDarganShots', []); shots.splice(originalIdx, 1); 
+        localStorage.setItem('castleDarganShots', JSON.stringify(shots));
+        renderShotsList(); updateAnalytics(); 
+        if(!isPlannerMode && currentPlaysLike) recommendClub(currentPlaysLike); 
+        if(isPlannerMode) renderPlannerUI(); else drawClubOverlay();
     }
 }
 
 document.getElementById('export-btn').addEventListener('click', () => {
-    const backupData = { shots: safeParse('castleDarganShots', []), scorecard: safeParse('castleDarganScorecard', {}), bag: safeParse('castleDarganBag', defaultBag), history: safeParse('castleDarganHistory', []), pins: safeParse('castleDarganPins', {}), tees: safeParse('castleDarganTees', {}), layups: safeParse('castleDarganLayups', {}), phcap: localStorage.getItem('castleDarganPlayingHandicap') || 18 };
+    const backupData = { 
+        shots: safeParse('castleDarganShots', []), scorecard: safeParse('castleDarganScorecard', {}), bag: safeParse('castleDarganBag', defaultBag), 
+        history: safeParse('castleDarganHistory', []), pins: safeParse('castleDarganPins', {}), tees: safeParse('castleDarganTees', {}), layups: safeParse('castleDarganLayups', {}),
+        phcap: localStorage.getItem('castleDarganPlayingHandicap') || 18
+    };
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(backupData)], {type: "application/json"})); a.download = `CDCaddy_Backup.json`; a.click();
 });
 document.getElementById('import-trigger-btn').addEventListener('click', () => document.getElementById('import-file').click());
@@ -235,7 +275,14 @@ document.getElementById('import-file').addEventListener('change', (e) => {
     reader.onload = function(e) {
         try {
             const data = JSON.parse(e.target.result);
-            if (data.shots) localStorage.setItem('castleDarganShots', JSON.stringify(data.shots)); if (data.scorecard) localStorage.setItem('castleDarganScorecard', JSON.stringify(data.scorecard)); if (data.bag) localStorage.setItem('castleDarganBag', JSON.stringify(data.bag)); if (data.history) localStorage.setItem('castleDarganHistory', JSON.stringify(data.history)); if (data.pins) localStorage.setItem('castleDarganPins', JSON.stringify(data.pins)); if (data.tees) localStorage.setItem('castleDarganTees', JSON.stringify(data.tees)); if (data.layups) localStorage.setItem('castleDarganLayups', JSON.stringify(data.layups)); if (data.phcap) localStorage.setItem('castleDarganPlayingHandicap', data.phcap);
+            if (data.shots) localStorage.setItem('castleDarganShots', JSON.stringify(data.shots)); 
+            if (data.scorecard) localStorage.setItem('castleDarganScorecard', JSON.stringify(data.scorecard));
+            if (data.bag) localStorage.setItem('castleDarganBag', JSON.stringify(data.bag)); 
+            if (data.history) localStorage.setItem('castleDarganHistory', JSON.stringify(data.history));
+            if (data.pins) localStorage.setItem('castleDarganPins', JSON.stringify(data.pins)); 
+            if (data.tees) localStorage.setItem('castleDarganTees', JSON.stringify(data.tees));
+            if (data.layups) localStorage.setItem('castleDarganLayups', JSON.stringify(data.layups));
+            if (data.phcap) localStorage.setItem('castleDarganPlayingHandicap', data.phcap);
             alert("Data imported! App will reload."); location.reload();
         } catch (err) { alert("Error parsing file."); }
     }; reader.readAsText(file);
@@ -250,12 +297,14 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const a = Math.sin(dLat/2)**2 + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon/2)**2; 
     return Math.round((R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)))) * 1.09361); 
 }
+
 function calculateBearing(lat1, lon1, lat2, lon2) {
     const dLon = toRadians(lon2 - lon1);
     const y = Math.sin(dLon) * Math.cos(toRadians(lat2));
     const x = Math.cos(toRadians(lat1)) * Math.sin(toRadians(lat2)) - Math.sin(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.cos(dLon);
     return (toDegrees(Math.atan2(y, x)) + 360) % 360;
 }
+
 function getDestination(lat, lng, distMeters, bearingDeg) {
     const R = 6371000; const brng = toRadians(bearingDeg); const lat1 = toRadians(lat); const lon1 = toRadians(lng);
     const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distMeters/R) + Math.cos(lat1) * Math.sin(distMeters/R) * Math.cos(brng));
@@ -274,19 +323,13 @@ async function fetchWeather(lat, lng) {
 }
 document.getElementById('refresh-weather-btn').addEventListener('click', () => { if(currentLat) fetchWeather(currentLat, currentLng); });
 
-function saveCurrentLayups() {
-    let savedLayups = safeParse('castleDarganLayups', {});
-    savedLayups[currentHoleIndex] = layupMarkers.map(m => ({lat: m.getLatLng().lat, lng: m.getLatLng().lng}));
-    localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
-}
-
 function initMap() {
     map = L.map('map', { zoomControl: false }).setView([54.198, -8.430], 16);
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' }).addTo(map);
 
     const blueDot = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#3498db; width:22px; height:22px; border-radius:50%; border:3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5); cursor: grab; pointer-events: auto;'></div>", iconSize: [28,28] });
     const redPin = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#e74c3c; width:15px; height:15px; border-radius:50%; border:2px solid white;'></div>", iconSize: [15,15] });
-    yellowLayupIcon = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#f1c40f; width:12px; height:12px; border-radius:50%; border:2px solid white;'></div>", iconSize: [12,12] });
+    yellowLayupIcon = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#f1c40f; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5); cursor: grab; pointer-events: auto;'></div>", iconSize: [12,12] });
 
     userMarker = L.marker([0,0], {icon: blueDot, draggable: true}).addTo(map); userMarker.dragging.disable(); 
     pinMarker = L.marker([0,0], {icon: redPin}).addTo(map);
@@ -295,16 +338,42 @@ function initMap() {
     userMarker.on('dragend', function(e) { saveNewTeeLocation(e.target.getLatLng()); });
     map.on('contextmenu', function(e) { saveNewTeeLocation(e.latlng); });
 
+    // REWRITTEN CLICK LOGIC FOR STRICT PLANNER / PLAY MODE SEPARATION
     map.on('click', function(e) {
         if(!currentLat) return;
-        if (layupMarkers.length >= 5) return alert("Maximum of 5 targets allowed.");
         
-        let newMarker = L.marker(e.latlng, {icon: yellowLayupIcon, draggable: true}).addTo(map);
-        newMarker.on('dragend', function() { saveCurrentLayups(); renderShotPlanner(); });
-        layupMarkers.push(newMarker);
-        
-        saveCurrentLayups();
-        renderShotPlanner(); 
+        if (isPlannerMode) {
+            // Planner Mode: Map clicks move the CURRENTLY SELECTED target in the dropdown
+            let savedLayups = safeParse('castleDarganLayups', {});
+            if (!savedLayups[currentHoleIndex]) savedLayups[currentHoleIndex] = [];
+            
+            let selectedIdx = parseInt(document.getElementById('planner-target-select').value);
+            
+            if (savedLayups[currentHoleIndex].length === 0) {
+                // If clicking an empty map, create target 1 automatically
+                savedLayups[currentHoleIndex].push({ lat: e.latlng.lat, lng: e.latlng.lng, club: 'Driver' });
+                selectedIdx = 0;
+            } else {
+                // Otherwise move the specific target selected in the dropdown
+                savedLayups[currentHoleIndex][selectedIdx].lat = e.latlng.lat;
+                savedLayups[currentHoleIndex][selectedIdx].lng = e.latlng.lng;
+            }
+            
+            localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+            updatePlannerDropdown();
+            document.getElementById('planner-target-select').value = selectedIdx;
+            renderPlannerUI();
+            
+        } else {
+            // Play Mode: Map clicks place the TEMPORARY LIVE TARGET
+            if (!liveTargetMarker) {
+                liveTargetMarker = L.marker(e.latlng, {icon: yellowLayupIcon, draggable: true}).addTo(map);
+                liveTargetMarker.on('dragend', function() { processLocation(currentLat, currentLng); });
+            } else {
+                liveTargetMarker.setLatLng(e.latlng);
+            }
+            processLocation(currentLat, currentLng);
+        }
     });
 }
 
@@ -322,54 +391,115 @@ function saveNewTeeLocation(latlng) {
     if (isPlannerMode) processLocation(latlng.lat, latlng.lng);
 }
 
+
 // ==========================================
-// DYNAMIC MULTI-SHOT PLANNER
+// NEW: DYNAMIC MULTI-SHOT PLANNER (PLANNER MODE ONLY)
 // ==========================================
-function renderShotPlanner() {
-    const box = document.getElementById('shot-planner-box');
+function updatePlannerDropdown() {
+    let savedLayups = safeParse('castleDarganLayups', {});
+    let route = savedLayups[currentHoleIndex] || [];
+    let select = document.getElementById('planner-target-select');
+    let currentVal = select.value;
     
-    if (!isPlannerMode && layupMarkers.length === 0) {
-        box.style.display = 'none';
-        if(clubOverlayGroup && map) map.removeLayer(clubOverlayGroup);
+    if (route.length === 0) {
+        select.innerHTML = '<option value="0">Target 1</option>';
         return;
     }
-    box.style.display = 'block';
+    
+    select.innerHTML = route.map((_, i) => `<option value="${i}">Target ${i+1}</option>`).join('');
+    
+    if (currentVal < route.length) { select.value = currentVal; } 
+    else { select.value = route.length - 1; }
+}
 
+document.getElementById('add-planned-target-btn').addEventListener('click', () => {
+    let savedLayups = safeParse('castleDarganLayups', {});
+    if (!savedLayups[currentHoleIndex]) savedLayups[currentHoleIndex] = [];
+    
+    if (savedLayups[currentHoleIndex].length >= 5) return alert("Maximum 5 targets allowed.");
+    
+    let lastLat = currentLat, lastLng = currentLng;
+    if (savedLayups[currentHoleIndex].length > 0) {
+        let last = savedLayups[currentHoleIndex][savedLayups[currentHoleIndex].length - 1];
+        lastLat = last.lat; lastLng = last.lng;
+    }
+    
+    // Add new target offset slightly to not stack perfectly
+    savedLayups[currentHoleIndex].push({ lat: lastLat + 0.0005, lng: lastLng + 0.0005, club: '7 Iron' });
+    localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+    
+    updatePlannerDropdown();
+    document.getElementById('planner-target-select').value = savedLayups[currentHoleIndex].length - 1;
+    renderPlannerUI();
+});
+
+document.getElementById('clear-planned-route-btn').addEventListener('click', () => {
+    let savedLayups = safeParse('castleDarganLayups', {});
+    if (savedLayups[currentHoleIndex]) {
+        delete savedLayups[currentHoleIndex];
+        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+    }
+    updatePlannerDropdown();
+    renderPlannerUI();
+    
+    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
+    const customPins = safeParse('castleDarganPins', {});
+    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+    if(currentLat && tLat) updateMapState(tLat, tLng);
+});
+
+function renderPlannerUI() {
+    if(plannerRouteGroup && map) map.removeLayer(plannerRouteGroup);
+    plannerRouteGroup = L.layerGroup().addTo(map);
+    
+    let savedLayups = safeParse('castleDarganLayups', {});
+    let route = savedLayups[currentHoleIndex] || [];
+    
     let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
     const customPins = safeParse('castleDarganPins', {});
     if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
 
     let points = [ {lat: currentLat, lng: currentLng} ];
-    layupMarkers.forEach(m => points.push({lat: m.getLatLng().lat, lng: m.getLatLng().lng}));
+    
+    // Draw Draggable Route Markers
+    route.forEach((pt, i) => {
+        points.push({lat: pt.lat, lng: pt.lng});
+        let m = L.marker([pt.lat, pt.lng], {
+            icon: L.divIcon({ className: 'custom-div-icon', html: `<div style='background-color:#9b59b6; width:18px; height:18px; border-radius:50%; border:2px solid white; color:white; font-size:12px; text-align:center; line-height:14px; font-weight:bold; box-shadow: 0 2px 5px rgba(0,0,0,0.5); cursor:grab;'>${i+1}</div>`, iconSize: [18,18] }), 
+            draggable: true
+        }).addTo(plannerRouteGroup);
+        
+        m.on('dragend', function(e) {
+            let currentLayups = safeParse('castleDarganLayups', {});
+            currentLayups[currentHoleIndex][i].lat = e.target.getLatLng().lat;
+            currentLayups[currentHoleIndex][i].lng = e.target.getLatLng().lng;
+            localStorage.setItem('castleDarganLayups', JSON.stringify(currentLayups));
+            renderPlannerUI(); // Recursively redraw
+        });
+    });
+    
     points.push({lat: tLat, lng: tLng});
-
-    let html = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <h4 style="margin: 0; color: #2c3e50;">Shot Planner</h4>
-            <div style="display: flex; gap: 10px;">
-                ${layupMarkers.length > 0 ? `<button onclick="undoLastLayup()" style="background:none; border:none; color:#f39c12; font-weight:bold; cursor:pointer; font-size:1rem;">↺ Undo</button>` : ''}
-                ${layupMarkers.length > 0 ? `<button onclick="clearLayups()" style="background:none; border:none; color:#e74c3c; font-weight:bold; cursor:pointer; font-size:1rem;">&times; Clear</button>` : ''}
-            </div>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:10px;">
-    `;
-
+    
+    // Build the Text UI Box
+    let html = '';
     const bag = getBag();
-
+    const analytics = calculateDispersion();
+    
     for(let i=0; i < points.length - 1; i++) {
         let start = points[i]; let end = points[i+1];
         let dist = calculateDistance(start.lat, start.lng, end.lat, end.lng);
         let bearing = calculateBearing(start.lat, start.lng, end.lat, end.lng);
         let playsLike = Math.max(0, Math.round(dist + (Math.cos(toRadians(liveWindDir - bearing)) * liveWindSpeed)));
 
-        if (!plannedClubs[i]) {
+        let club = (route[i] && route[i].club) ? route[i].club : 'Driver';
+        if (!route[i]) { 
             let rec = getClubRecommendationData(playsLike);
-            plannedClubs[i] = rec ? rec.club : 'Driver';
+            club = rec ? rec.club : 'Driver';
         }
 
-        let clubOptions = bag.map(c => `<option value="${c}" ${plannedClubs[i] === c ? 'selected' : ''}>${c}</option>`).join('');
-        let title = (i === points.length - 2) ? "Approach to Pin" : `Shot ${i+1} to Target`;
-
+        let title = (i === points.length - 1) ? "Approach to Pin" : `Shot ${i+1} to Target ${i+1}`;
+        let clubOptions = bag.map(c => `<option value="${c}" ${club === c ? 'selected' : ''}>${c}</option>`).join('');
+        
         html += `
             <div style="display:flex; align-items:center; justify-content:space-between; background:#f9f9f9; padding:10px; border-radius:8px; border:1px solid #eee;">
                 <div style="flex:1;">
@@ -377,65 +507,160 @@ function renderShotPlanner() {
                     <span style="color:#e67e22; font-size:0.85rem;">${dist}y (Plays ${playsLike}y)</span>
                 </div>
                 <div style="flex:1; text-align:right;">
-                    <select onchange="updatePlannedClub(${i}, this.value)" style="padding:6px; border-radius:6px; border:1px solid #ccc; font-weight:bold; width: 100%;">
+                    <select onchange="updatePlannerRouteClub(${i}, this.value)" style="padding:6px; border-radius:6px; border:1px solid #ccc; font-weight:bold; width: 100%;">
                         ${clubOptions}
                     </select>
                 </div>
             </div>`;
-    }
-    html += `</div>`;
-    box.innerHTML = html;
+            
+        // Draw the visual dispersion cone for this specific segment
+        let data = analytics[club];
+        if(data && data.avg) {
+            let dispersionAngle = data.spread || 10; 
+            let avgMeters = data.avg * 0.9144;
+            let maxMeters = (data.max || data.avg + 20) * 0.9144;
+            let minMeters = (data.min || data.avg - 20) * 0.9144;
 
-    drawMultiShotOverlay(points);
+            let center = [start.lat, start.lng];
+            let leftMax = getDestination(start.lat, start.lng, maxMeters, bearing - dispersionAngle);
+            let rightMax = getDestination(start.lat, start.lng, maxMeters, bearing + dispersionAngle);
+            let leftMin = getDestination(start.lat, start.lng, minMeters, bearing - dispersionAngle);
+            let rightMin = getDestination(start.lat, start.lng, minMeters, bearing + dispersionAngle);
+
+            L.polygon([ center, leftMax, rightMax ], { color: '#9b59b6', weight: 1, fillOpacity: 0.15 }).addTo(plannerRouteGroup);
+            
+            if(data.max && data.min) {
+                L.polyline([leftMin, rightMin], { color: '#e74c3c', weight: 2, dashArray: '3, 3' }).addTo(plannerRouteGroup);
+                L.polyline([leftMax, rightMax], { color: '#27ae60', weight: 2, dashArray: '3, 3' }).addTo(plannerRouteGroup);
+            }
+            
+            let avgPoint = getDestination(start.lat, start.lng, avgMeters, bearing);
+            L.polyline([center, avgPoint], { color: '#9b59b6', weight: 2, dashArray: '4, 4' }).addTo(plannerRouteGroup);
+            L.circleMarker(avgPoint, {radius: 4, color: '#9b59b6', fillOpacity: 1}).addTo(plannerRouteGroup);
+        }
+    }
+    
+    document.getElementById('planner-route-details').innerHTML = html;
+    
+    if(currentLat && tLat) {
+        let pathPoints = points.map(p => [p.lat, p.lng]);
+        pathLine.setLatLngs(pathPoints);
+    }
 }
 
-window.updatePlannedClub = function(index, club) {
-    plannedClubs[index] = club;
-    renderShotPlanner();
-};
-
-window.clearLayups = function() {
-    layupMarkers.forEach(m => map.removeLayer(m));
-    layupMarkers = []; plannedClubs = [];
-    
+window.updatePlannerRouteClub = function(index, club) {
     let savedLayups = safeParse('castleDarganLayups', {});
-    if(savedLayups[currentHoleIndex]) { delete savedLayups[currentHoleIndex]; localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups)); }
-    
+    if (savedLayups[currentHoleIndex] && savedLayups[currentHoleIndex][index]) {
+        savedLayups[currentHoleIndex][index].club = club;
+        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+        renderPlannerUI();
+    }
+}
+
+// ==========================================
+// PASSIVE ROUTE GUIDE (PLAY MODE ONLY)
+// ==========================================
+function drawPassivePlannedRoute() {
+    if (passiveRouteGroup && map) map.removeLayer(passiveRouteGroup);
+    passiveRouteGroup = L.layerGroup().addTo(map);
+
+    let savedLayups = safeParse('castleDarganLayups', {});
+    let route = savedLayups[currentHoleIndex];
+    if (!route || route.length === 0) return;
+
     let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
     const customPins = safeParse('castleDarganPins', {});
     if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
-    if(currentLat && tLat) updateMapState(tLat, tLng);
-    
-    renderShotPlanner();
-};
 
-window.undoLastLayup = function() {
-    if (layupMarkers.length > 0) {
-        let lastMarker = layupMarkers.pop(); map.removeLayer(lastMarker);
-        plannedClubs.pop(); 
-        
-        let savedLayups = safeParse('castleDarganLayups', {});
-        if (layupMarkers.length > 0) {
-            savedLayups[currentHoleIndex] = layupMarkers.map(m => ({lat: m.getLatLng().lat, lng: m.getLatLng().lng}));
-        } else {
-            delete savedLayups[currentHoleIndex];
-        }
-        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
-        
-        let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
-        const customPins = safeParse('castleDarganPins', {});
-        if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
-        if(currentLat && tLat) updateMapState(tLat, tLng);
+    const selectedTee = document.getElementById('tee-box-select').value;
+    let startLat = courseData[currentHoleIndex].tees[selectedTee].lat;
+    let startLng = courseData[currentHoleIndex].tees[selectedTee].lng;
 
-        renderShotPlanner();
+    const customTees = safeParse('castleDarganTees', {});
+    if (customTees[currentHoleIndex] && customTees[currentHoleIndex][selectedTee]) {
+        startLat = customTees[currentHoleIndex][selectedTee].lat;
+        startLng = customTees[currentHoleIndex][selectedTee].lng;
     }
-};
+
+    let pathPoints = [[startLat, startLng]];
+    route.forEach((pt, i) => {
+        pathPoints.push([pt.lat, pt.lng]);
+        L.circleMarker([pt.lat, pt.lng], {radius: 6, color: '#9b59b6', fillOpacity: 0.8})
+         .bindTooltip(`Planned Target ${i+1}`)
+         .addTo(passiveRouteGroup);
+    });
+    pathPoints.push([tLat, tLng]);
+
+    L.polyline(pathPoints, {color: '#9b59b6', weight: 3, dashArray: '5, 5', opacity: 0.7}).addTo(passiveRouteGroup);
+}
+
+// ==========================================
+// LIVE TARGET OVERLAY (PLAY MODE ONLY)
+// ==========================================
+document.getElementById('club-overlay-select').addEventListener('change', drawClubOverlay);
+
+function drawClubOverlay() {
+    if(clubOverlayGroup && map) map.removeLayer(clubOverlayGroup); 
+    const club = document.getElementById('club-overlay-select').value;
+    if(!club || !currentLat || !map) return;
+    
+    const analytics = calculateDispersion(); 
+    const data = analytics[club];
+    if(!data || !data.avg) return;
+    
+    clubOverlayGroup = L.layerGroup().addTo(map); 
+    const center = [currentLat, currentLng];
+
+    // Point the cone at the Live Target if it exists, otherwise the Pin
+    let tLat = courseData[currentHoleIndex].lat;
+    let tLng = courseData[currentHoleIndex].lng;
+    
+    const customPins = safeParse('castleDarganPins', {});
+    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+    
+    if (liveTargetMarker) {
+        tLat = liveTargetMarker.getLatLng().lat;
+        tLng = liveTargetMarker.getLatLng().lng;
+    }
+
+    const aimBearing = calculateBearing(currentLat, currentLng, tLat, tLng);
+    const dispersionAngle = data.spread || 10; 
+    
+    const avgMeters = data.avg * 0.9144;
+    const maxMeters = (data.max || data.avg + 20) * 0.9144;
+    const minMeters = (data.min || data.avg - 20) * 0.9144;
+
+    const leftMax = getDestination(currentLat, currentLng, maxMeters, aimBearing - dispersionAngle);
+    const rightMax = getDestination(currentLat, currentLng, maxMeters, aimBearing + dispersionAngle);
+    const leftMin = getDestination(currentLat, currentLng, minMeters, aimBearing - dispersionAngle);
+    const rightMin = getDestination(currentLat, currentLng, minMeters, aimBearing + dispersionAngle);
+
+    L.polygon([ center, leftMax, rightMax ], { color: '#3498db', weight: 1, fillOpacity: 0.15 }).bindTooltip(`${club} Dispersion Zone`, {direction: 'top'}).addTo(clubOverlayGroup);
+
+    if(data.max && data.min) {
+        L.polyline([leftMin, rightMin], { color: '#e74c3c', weight: 3, dashArray: '5, 5' }).bindTooltip(`Min Distance`, {direction: 'top'}).addTo(clubOverlayGroup);
+        L.polyline([leftMax, rightMax], { color: '#27ae60', weight: 3, dashArray: '5, 5' }).bindTooltip(`Max Distance`, {direction: 'top'}).addTo(clubOverlayGroup);
+    }
+    
+    const avgPoint = getDestination(currentLat, currentLng, avgMeters, aimBearing);
+    L.polyline([center, avgPoint], { color: '#f1c40f', weight: 2, dashArray: '4, 4' }).addTo(clubOverlayGroup);
+    L.circleMarker(avgPoint, {radius: 5, color: '#f1c40f', fillOpacity: 1}).bindTooltip(`Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
+}
+
+document.getElementById('clear-live-target-btn').addEventListener('click', () => {
+    if(liveTargetMarker) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
+    document.getElementById('live-target-box').style.display = 'none';
+    drawClubOverlay();
+});
 
 document.getElementById('recenter-map-btn').addEventListener('click', () => {
     hasCenteredMapThisHole = false; 
-    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
+    let tLat = courseData[currentHoleIndex].lat;
+    let tLng = courseData[currentHoleIndex].lng;
+    
     const customPins = safeParse('castleDarganPins', {}); 
     if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+    
     if(currentLat && tLat) updateMapState(tLat, tLng);
 });
 
@@ -444,11 +669,9 @@ function updateMapState(tLat, tLng) {
     if(currentLat) userMarker.setLatLng([currentLat, currentLng]); 
     if(tLat) pinMarker.setLatLng([tLat, tLng]);
     
-    if(currentLat && tLat) {
-        let pathPoints = [[currentLat, currentLng]];
-        layupMarkers.forEach(m => pathPoints.push([m.getLatLng().lat, m.getLatLng().lng]));
-        pathPoints.push([tLat, tLng]);
-        pathLine.setLatLngs(pathPoints);
+    // In Play mode without live target, basic pathline to Pin
+    if (!isPlannerMode && currentLat && tLat) {
+        pathLine.setLatLngs([[currentLat, currentLng], [tLat, tLng]]);
     }
     
     if (!hasCenteredMapThisHole && currentLat && tLat) { 
@@ -457,46 +680,7 @@ function updateMapState(tLat, tLng) {
     }
 }
 
-function drawMultiShotOverlay(points) {
-    if(clubOverlayGroup && map) map.removeLayer(clubOverlayGroup); 
-    clubOverlayGroup = L.layerGroup().addTo(map); 
-
-    const analytics = calculateDispersion(); 
-
-    for(let i=0; i < points.length - 1; i++) {
-        let start = points[i]; let end = points[i+1];
-        let club = plannedClubs[i];
-        if(!club) continue;
-
-        let data = analytics[club];
-        if(!data || !data.avg) continue;
-
-        let aimBearing = calculateBearing(start.lat, start.lng, end.lat, end.lng);
-        let dispersionAngle = data.spread || 10; 
-        
-        let avgMeters = data.avg * 0.9144;
-        let maxMeters = (data.max || data.avg + 20) * 0.9144;
-        let minMeters = (data.min || data.avg - 20) * 0.9144;
-
-        let center = [start.lat, start.lng];
-        let leftMax = getDestination(start.lat, start.lng, maxMeters, aimBearing - dispersionAngle);
-        let rightMax = getDestination(start.lat, start.lng, maxMeters, aimBearing + dispersionAngle);
-        let leftMin = getDestination(start.lat, start.lng, minMeters, aimBearing - dispersionAngle);
-        let rightMin = getDestination(start.lat, start.lng, minMeters, aimBearing + dispersionAngle);
-
-        L.polygon([ center, leftMax, rightMax ], { color: '#3498db', weight: 1, fillOpacity: 0.15 }).bindTooltip(`Shot ${i+1}: ${club} Zone`, {direction: 'top'}).addTo(clubOverlayGroup);
-        
-        if(data.max && data.min) {
-            L.polyline([leftMin, rightMin], { color: '#e74c3c', weight: 3, dashArray: '5, 5' }).addTo(clubOverlayGroup);
-            L.polyline([leftMax, rightMax], { color: '#27ae60', weight: 3, dashArray: '5, 5' }).addTo(clubOverlayGroup);
-        }
-        
-        let avgPoint = getDestination(start.lat, start.lng, avgMeters, aimBearing);
-        L.polyline([center, avgPoint], { color: '#f1c40f', weight: 2, dashArray: '4, 4' }).addTo(clubOverlayGroup);
-        L.circleMarker(avgPoint, {radius: 5, color: '#f1c40f', fillOpacity: 1}).bindTooltip(`${club} Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
-    }
-}
-
+// MAIN LOCATION ENGINE
 function processLocation(lat, lng) {
     currentLat = lat; currentLng = lng;
     if(liveWindSpeed === 0) fetchWeather(currentLat, currentLng);
@@ -523,20 +707,41 @@ function processLocation(lat, lng) {
     currentPlaysLike = Math.max(0, Math.round(rawYardage + effectiveWind)); 
     document.getElementById('plays-like-number').innerText = currentPlaysLike > 0 ? currentPlaysLike : "--";
 
-    if(tLat) updateMapState(tLat, tLng); recommendClub(currentPlaysLike);
+    if(tLat) updateMapState(tLat, tLng); 
     
-    const savedLayups = safeParse('castleDarganLayups', {});
-    layupMarkers.forEach(m => { if(map) map.removeLayer(m); }); layupMarkers = [];
-    
-    if (savedLayups[currentHoleIndex] && Array.isArray(savedLayups[currentHoleIndex]) && map && yellowLayupIcon) {
-        savedLayups[currentHoleIndex].forEach(l => {
-            let m = L.marker([l.lat, l.lng], {icon: yellowLayupIcon, draggable: true}).addTo(map);
-            m.on('dragend', function() { saveCurrentLayups(); renderShotPlanner(); });
-            layupMarkers.push(m);
-        });
+    if (isPlannerMode) {
+        renderPlannerUI();
+    } else {
+        // Play Mode Live Target logic
+        if (liveTargetMarker) {
+            document.getElementById('live-target-box').style.display = 'block';
+            let lLat = liveTargetMarker.getLatLng().lat;
+            let lLng = liveTargetMarker.getLatLng().lng;
+            
+            let distToLayup = calculateDistance(currentLat, currentLng, lLat, lLng);
+            let distToPin = calculateDistance(lLat, lLng, tLat, tLng);
+            let layupBearing = calculateBearing(currentLat, currentLng, lLat, lLng);
+            let layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed)));
+            let pinBearing = calculateBearing(lLat, lLng, tLat, tLng);
+            let pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed)));
+
+            let layupRec = getClubRecommendationData(layupPlaysLike); 
+            let pinRec = getClubRecommendationData(pinPlaysLike);
+            
+            document.getElementById('live-target-dist').innerText = distToLayup; 
+            document.getElementById('live-target-plays').innerText = layupPlaysLike;
+            document.getElementById('live-target-club').innerText = layupRec ? layupRec.club : 'None';
+            document.getElementById('live-rem-dist').innerText = distToPin; 
+            document.getElementById('live-rem-plays').innerText = pinPlaysLike;
+            document.getElementById('live-rem-club').innerText = pinRec ? pinRec.club : 'None';
+        } else {
+            document.getElementById('live-target-box').style.display = 'none';
+        }
+        
+        recommendClub(currentPlaysLike);
+        drawClubOverlay();
+        drawPassivePlannedRoute();
     }
-    
-    renderShotPlanner(); 
 }
 
 function initGPS() {
@@ -560,7 +765,6 @@ document.getElementById('audio-caddy-btn').addEventListener('click', () => {
     const speech = new SpeechSynthesisUtterance(msg); speech.lang = 'en-GB'; speech.rate = 0.9; window.speechSynthesis.speak(speech);
 });
 
-// REWRITTEN TO GUARANTEE STRICT MIN/MAX/SPREAD OUTPUT FOR ALL CLUBS
 function calculateDispersion() {
     const bag = getBag(); 
     const baselines = baselineYardages[document.getElementById('handicap-select').value || "High"];
@@ -632,14 +836,16 @@ document.getElementById('track-btn').addEventListener('click', () => {
     if (!isTrackingShot) {
         isTrackingShot = true; shotStartLat = currentLat; shotStartLng = currentLng;
         
-        if (layupMarkers.length > 0) { 
-            shotTargetLat = layupMarkers[0].getLatLng().lat; shotTargetLng = layupMarkers[0].getLatLng().lng; 
+        // Priority Target for Shot Dispersion in Play Mode
+        if (liveTargetMarker) { 
+            shotTargetLat = liveTargetMarker.getLatLng().lat; shotTargetLng = liveTargetMarker.getLatLng().lng; 
         } else {
             let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
             const customPins = safeParse('castleDarganPins', {});
             if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
             shotTargetLat = tLat; shotTargetLng = tLng;
         }
+        
         document.getElementById('track-btn').innerText = "End Shot"; document.getElementById('track-btn').style.backgroundColor = "#f39c12"; 
     } else {
         pendingDistance = calculateDistance(shotStartLat, shotStartLng, currentLat, currentLng);
@@ -693,18 +899,6 @@ function resetTrackerUI() {
 // ==========================================
 // 7. PINS & MULTIPLAYER SCORECARD
 // ==========================================
-document.getElementById('update-tee-btn').addEventListener('click', () => {
-    if (!currentLat) return alert("Waiting for GPS...");
-    const selectedTee = document.getElementById('tee-box-select').value; let savedTees = safeParse('castleDarganTees', {});
-    if(!savedTees[currentHoleIndex]) savedTees[currentHoleIndex] = {}; const oldTee = savedTees[currentHoleIndex][selectedTee];
-    savedTees[currentHoleIndex][selectedTee] = { lat: currentLat, lng: currentLng }; localStorage.setItem('castleDarganTees', JSON.stringify(savedTees));
-    hasCenteredMapThisHole = false; 
-    showToast("Tee Box Saved to Current Location!", () => {
-        if (oldTee) { savedTees[currentHoleIndex][selectedTee] = oldTee; } else { delete savedTees[currentHoleIndex][selectedTee]; }
-        localStorage.setItem('castleDarganTees', JSON.stringify(savedTees)); updateHoleDisplay(); 
-    }); updateHoleDisplay(); 
-});
-
 document.getElementById('update-pin-btn').addEventListener('click', () => {
     if (!currentLat) return alert("Waiting for GPS...");
     let customPins = safeParse('castleDarganPins', {}); customPins[currentHoleIndex] = { lat: currentLat, lng: currentLng }; localStorage.setItem('castleDarganPins', JSON.stringify(customPins));
@@ -733,21 +927,37 @@ function updateHoleDisplay() {
     document.getElementById('hole-par-display').innerText = `Par ${activePar} | SI ${activeSi} | ${officialYardage}y`;
     document.getElementById('scorecard-hole-num').innerText = hd.hole;
     
-    layupMarkers.forEach(m => { if(map) map.removeLayer(m); }); layupMarkers = [];
-    document.getElementById('shot-planner-box').style.display = 'none';
-    
     renderMultiplayerScorecard();
 
     if (isPlannerMode) {
+        document.getElementById('planner-controls-box').style.display = 'block';
+        document.getElementById('live-target-box').style.display = 'none';
+        document.getElementById('club-overlay-select').style.display = 'none';
+        if(liveTargetMarker) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
+        
+        let savedLayups = safeParse('castleDarganLayups', {});
+        if (!savedLayups[currentHoleIndex]) savedLayups[currentHoleIndex] = [];
+        updatePlannerDropdown();
+        renderPlannerUI();
+
         if(userMarker) { userMarker.dragging.enable(); }
         const savedTees = safeParse('castleDarganTees', {}); let teeCoords = hd.tees[selectedTee];
         if (savedTees[currentHoleIndex] && savedTees[currentHoleIndex][selectedTee]) { teeCoords = savedTees[currentHoleIndex][selectedTee]; }
         processLocation(teeCoords.lat, teeCoords.lng);
     } else {
+        document.getElementById('planner-controls-box').style.display = 'none';
+        document.getElementById('club-overlay-select').style.display = 'block';
+        if(plannerRouteGroup && map) map.removeLayer(plannerRouteGroup);
+        if(liveTargetMarker) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
+        document.getElementById('live-target-box').style.display = 'none';
+        
         if(userMarker) { userMarker.dragging.disable(); }
         let tLat = courseData[currentHoleIndex].lat; let tLng = courseData[currentHoleIndex].lng;
         const customPins = safeParse('castleDarganPins', {}); if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
         if(currentLat && tLat) updateMapState(tLat, tLng);
+        
+        drawPassivePlannedRoute();
+        processLocation(currentLat, currentLng);
     }
 }
 

@@ -80,7 +80,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="text-align: left; line-height: 1.2;">
                         <span style="font-weight: bold;">PLANNER MODE</span><br>
-                        <span style="font-size: 0.8rem;">Tap to plot route | Drag targets to adjust</span>
+                        <span style="font-size: 0.8rem;">Tap map to plot multi-shot routes</span>
                     </div>
                     <button id="exit-planner-btn" style="background: #fff; color: #f39c12; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">Exit</button>
                 </div>
@@ -96,13 +96,51 @@
             </header>
 
             <div style="position: relative; margin-bottom: 10px;">
+                <select id="club-overlay-select" style="position: absolute; top: 10px; left: 10px; z-index: 1000; padding: 8px; border-radius: 8px; font-weight: bold; border: 2px solid #3498db; background: rgba(255,255,255,0.95); cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); max-width: 60%;">
+                    <option value="">🎯 Range Overlay: Off</option>
+                </select>
                 <div id="map" style="height: 300px; border-radius: 15px; z-index: 1; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></div>
                 <button id="recenter-map-btn" style="position: absolute; bottom: 15px; right: 15px; z-index: 1000; background: white; border: none; border-radius: 8px; padding: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 1.2rem;">🎯</button>
             </div>
 
-            <!-- DYNAMIC SHOT PLANNER BOX -->
-            <div id="shot-planner-box" style="display: none; background: #fff; border-top: 4px solid #3498db; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                <!-- Populated by JavaScript to allow multi-shot routing -->
+            <!-- NEW: PLANNER CONTROLS (Only visible in Planner Mode) -->
+            <div id="planner-controls-box" style="display: none; background: #fff; border-top: 4px solid #9b59b6; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h4 style="margin: 0; color: #2c3e50;">Route Planner</h4>
+                    <button id="clear-planned-route-btn" style="background: none; border: none; color: #e74c3c; font-weight: bold; cursor: pointer; padding: 0; font-size: 0.9rem;">&times; Clear Route</button>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                    <div style="flex: 1; display: flex; flex-direction: column;">
+                        <label style="font-size: 0.75rem; color: #7f8c8d; margin-bottom: 2px; font-weight: bold;">Editing Target:</label>
+                        <select id="planner-target-select" style="padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-weight: bold;">
+                            <option value="0">Target 1</option>
+                        </select>
+                    </div>
+                    <button id="add-planned-target-btn" class="action-btn blue-btn" style="flex: 1; padding: 12px; margin-top: 15px; font-size: 0.9rem;">+ Add Next Target</button>
+                </div>
+                <div id="planner-route-details" style="display:flex; flex-direction:column; gap:10px;">
+                    <!-- JS Populated list of shots and clubs -->
+                </div>
+            </div>
+
+            <!-- NEW: LIVE TARGET BOX (Only visible in Play Mode) -->
+            <div id="live-target-box" style="display: none; background: #fff; border-left: 5px solid #f1c40f; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <h4 style="margin: 0 0 10px 0; color: #2c3e50;">Live Target</h4>
+                    <button id="clear-live-target-btn" style="background: none; border: none; color: #e74c3c; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 0.8;">&times;</button>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.95rem;">
+                    <div style="flex: 1; padding-right: 10px;">
+                        <b style="color: #2c3e50;">1. To Target:</b> <span id="live-target-dist" style="font-weight:bold;">--</span>y<br>
+                        <span style="color: #e67e22; font-size: 0.8rem;">(Plays <span id="live-target-plays">--</span>y)</span><br>
+                        <strong style="color: #27ae60;" id="live-target-club">--</strong>
+                    </div>
+                    <div style="flex: 1; border-left: 1px solid #eee; padding-left: 10px;">
+                        <b style="color: #2c3e50;">2. To Pin:</b> <span id="live-rem-dist" style="font-weight:bold;">--</span>y<br>
+                        <span style="color: #e67e22; font-size: 0.8rem;">(Plays <span id="live-rem-plays">--</span>y)</span><br>
+                        <strong style="color: #27ae60;" id="live-rem-club">--</strong>
+                    </div>
+                </div>
             </div>
 
             <section class="gps-display card">
