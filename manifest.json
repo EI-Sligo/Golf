@@ -3,14 +3,13 @@
   "short_name": "CDCaddy",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f4f7f6",
+  "background_color": "#2c3e50",
   "theme_color": "#2c3e50",
   "icons": [
     {
-      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Golf_flag.svg/512px-Golf_flag.svg.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "src": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/26f3.png",
+      "sizes": "72x72",
+      "type": "image/png"
     }
   ]
 }

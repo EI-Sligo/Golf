@@ -368,6 +368,17 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
     return (toDegrees(Math.atan2(y, x)) + 360) % 360;
 }
 
+// NEW MATH: Calculates a destination coordinate given a starting point, distance, and angle.
+function getDestination(lat, lng, distMeters, bearingDeg) {
+    const R = 6371000;
+    const brng = toRadians(bearingDeg);
+    const lat1 = toRadians(lat);
+    const lon1 = toRadians(lng);
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distMeters/R) + Math.cos(lat1) * Math.sin(distMeters/R) * Math.cos(brng));
+    const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distMeters/R) * Math.cos(lat1), Math.cos(distMeters/R) - Math.sin(lat1) * Math.sin(lat2));
+    return [toDegrees(lat2), toDegrees(lon2)];
+}
+
 async function fetchWeather(lat, lng) {
     try {
         const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=mph`);
@@ -507,6 +518,9 @@ function updateMapState(tLat, tLng) {
     }
 }
 
+// ==========================================
+// NEW: TARGET DISPERSION VISUAL CONE
+// ==========================================
 document.getElementById('club-overlay-select').addEventListener('change', drawClubOverlay);
 
 function drawClubOverlay() {
@@ -522,18 +536,50 @@ function drawClubOverlay() {
     clubOverlayGroup = L.layerGroup().addTo(map); 
     const center = [currentLat, currentLng];
 
-    if(data.max && data.min) {
-        L.circle(center, { 
-            radius: data.min * 0.9144, color: '#e74c3c', weight: 2, dashArray: '5, 5', fill: false 
-        }).bindTooltip(`Min: ${data.min}y`, {direction: 'top'}).addTo(clubOverlayGroup);
-        
-        L.circle(center, { 
-            radius: data.max * 0.9144, color: '#27ae60', weight: 2, dashArray: '5, 5', fill: false 
-        }).bindTooltip(`Max: ${data.max}y`, {direction: 'top'}).addTo(clubOverlayGroup);
+    // Determine target to point the cone at (Layup or Pin)
+    let tLat = courseData[currentHoleIndex].lat;
+    let tLng = courseData[currentHoleIndex].lng;
+    const customPins = safeParse('castleDarganPins', {});
+    if (customPins[currentHoleIndex]) { 
+        tLat = customPins[currentHoleIndex].lat; 
+        tLng = customPins[currentHoleIndex].lng; 
     }
-    L.circle(center, { 
-        radius: data.avg * 0.9144, color: '#3498db', weight: 3, fillOpacity: 0.05, fillColor: '#3498db' 
-    }).bindTooltip(`${club} Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
+    if (layupMarker) {
+        tLat = layupMarker.getLatLng().lat;
+        tLng = layupMarker.getLatLng().lng;
+    }
+
+    // Direction calculation
+    const aimBearing = calculateBearing(currentLat, currentLng, tLat, tLng);
+    
+    // Cone Width: Represents a typical amateur 10-degree left/right spread
+    const dispersionAngle = 10; 
+    
+    const avgMeters = data.avg * 0.9144;
+    const maxMeters = (data.max || data.avg + 20) * 0.9144;
+    const minMeters = (data.min || data.avg - 20) * 0.9144;
+
+    // Project points forward
+    const leftMax = getDestination(currentLat, currentLng, maxMeters, aimBearing - dispersionAngle);
+    const rightMax = getDestination(currentLat, currentLng, maxMeters, aimBearing + dispersionAngle);
+    const leftMin = getDestination(currentLat, currentLng, minMeters, aimBearing - dispersionAngle);
+    const rightMin = getDestination(currentLat, currentLng, minMeters, aimBearing + dispersionAngle);
+
+    // 1. Draw The Left/Right Dispersion Cone
+    L.polygon([ center, leftMax, rightMax ], { 
+        color: '#3498db', weight: 1, fillOpacity: 0.15 
+    }).bindTooltip(`${club} Dispersion Zone`, {direction: 'top'}).addTo(clubOverlayGroup);
+
+    // 2. Draw Distance Arcs inside the cone
+    if(data.max && data.min) {
+        L.polyline([leftMin, rightMin], { color: '#e74c3c', weight: 3, dashArray: '5, 5' }).bindTooltip(`Min Distance`, {direction: 'top'}).addTo(clubOverlayGroup);
+        L.polyline([leftMax, rightMax], { color: '#27ae60', weight: 3, dashArray: '5, 5' }).bindTooltip(`Max Distance`, {direction: 'top'}).addTo(clubOverlayGroup);
+    }
+    
+    // 3. Draw the Average Target Point
+    const avgPoint = getDestination(currentLat, currentLng, avgMeters, aimBearing);
+    L.polyline([center, avgPoint], { color: '#f1c40f', weight: 2, dashArray: '4, 4' }).addTo(clubOverlayGroup);
+    L.circleMarker(avgPoint, {radius: 5, color: '#f1c40f', fillOpacity: 1}).bindTooltip(`Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
 }
 
 function processLocation(lat, lng) {
