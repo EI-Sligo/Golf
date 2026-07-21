@@ -1,37 +1,62 @@
 // ==========================================
 // 1. GLOBAL VARIABLES & SELF-HEALING MEMORY
 // ==========================================
-let currentLat = null, currentLng = null, currentHoleIndex = 0; 
-let isTrackingShot = false, shotStartLat = null, shotStartLng = null, pendingDistance = 0;
-let shotTargetLat = null, shotTargetLng = null; 
+let currentLat = null;
+let currentLng = null;
+let currentHoleIndex = 0; 
 
-let map, userMarker, pinMarker, pathLine, layupMarker;
+let isTrackingShot = false;
+let shotStartLat = null;
+let shotStartLng = null;
+let pendingDistance = 0;
+
+let shotTargetLat = null;
+let shotTargetLng = null; 
+
+let map;
+let userMarker;
+let pinMarker;
+let pathLine;
+let layupMarker;
+let layupMarkers = []; // Array to hold multiple layups
+
 let yellowLayupIcon = null; 
 let clubOverlayGroup = null; 
 let tracerMap = null; 
 
-let liveWindSpeed = 0, liveWindDir = 0, currentPlaysLike = 0;
-let historyChartInstance = null, missTendencyChartInstance = null;
+let liveWindSpeed = 0;
+let liveWindDir = 0;
+let currentPlaysLike = 0;
+
+let historyChartInstance = null;
+let missTendencyChartInstance = null;
 let hasCenteredMapThisHole = false; 
 
 let isPlannerMode = false;
 let gpsWatchId = null;
 let hasReachedGreen = false; 
 let toastTimeout = null;
+
 let activePlayers = []; 
 
+// This prevents the app from crashing if LocalStorage ever gets corrupted
 function safeParse(key, fallback) {
     try {
         const item = localStorage.getItem(key);
-        if (!item) return fallback;
+        if (!item) {
+            return fallback;
+        }
         return JSON.parse(item);
-    } catch (e) {
+    } catch (error) {
         console.warn(`Corrupted data detected for ${key}. Resetting to default.`);
         localStorage.removeItem(key);
         return fallback;
     }
 }
 
+// ==========================================
+// COURSE DATA & ADVANCED BASELINES
+// ==========================================
 const courseData = [
     { hole: 1, lat: 54.19860260754416, lng: -8.430412853346407, par: 4, si: 9, redPar: 4, redSi: 13, yds: { blue: 406, white: 379, green: 370, red: 337 }, bearing: 80 },
     { hole: 2, lat: 54.200161814306895, lng: -8.424006844479758, par: 4, si: 3, redPar: 5, redSi: 11, yds: { blue: 507, white: 452, green: 444, red: 423 }, bearing: 250 },
@@ -75,16 +100,69 @@ function generateTees() {
 }
 generateTees();
 
+// NEW: Highly detailed Pre-Loaded Default Stats
+// 'spread' represents the left/right directional cone angle in degrees
 const baselineYardages = { 
-    "High": { "Driver": 200, "3 Wood": 180, "5 Wood": 170, "4 Hybrid": 160, "5 Hybrid": 150, "4 Iron": 160, "5 Iron": 150, "6 Iron": 140, "7 Iron": 130, "8 Iron": 120, "9 Iron": 110, "PW": 100, "GW": 90, "SW": 80, "Putter": 15 }, 
-    "Mid":  { "Driver": 230, "3 Wood": 210, "5 Wood": 195, "4 Hybrid": 185, "5 Hybrid": 175, "4 Iron": 185, "5 Iron": 175, "6 Iron": 165, "7 Iron": 155, "8 Iron": 145, "9 Iron": 135, "PW": 120, "GW": 105, "SW": 95, "Putter": 15 }, 
-    "Low":  { "Driver": 260, "3 Wood": 235, "5 Wood": 220, "4 Hybrid": 205, "5 Hybrid": 195, "4 Iron": 205, "5 Iron": 195, "6 Iron": 180, "7 Iron": 165, "8 Iron": 155, "9 Iron": 145, "PW": 130, "GW": 115, "SW": 105, "Putter": 15 } 
+    "High": { 
+        "Driver": { avg: 200, min: 160, max: 220, spread: 15 }, 
+        "3 Wood": { avg: 180, min: 140, max: 195, spread: 14 }, 
+        "5 Wood": { avg: 170, min: 135, max: 185, spread: 13 }, 
+        "4 Hybrid": { avg: 160, min: 130, max: 175, spread: 12 }, 
+        "5 Hybrid": { avg: 150, min: 125, max: 165, spread: 12 }, 
+        "4 Iron": { avg: 150, min: 120, max: 165, spread: 11 }, 
+        "5 Iron": { avg: 145, min: 115, max: 160, spread: 10 }, 
+        "6 Iron": { avg: 140, min: 115, max: 155, spread: 9 }, 
+        "7 Iron": { avg: 130, min: 110, max: 145, spread: 8 }, 
+        "8 Iron": { avg: 120, min: 100, max: 135, spread: 7 }, 
+        "9 Iron": { avg: 110, min: 95, max: 125, spread: 6 }, 
+        "PW": { avg: 100, min: 85, max: 115, spread: 5 }, 
+        "GW": { avg: 90, min: 80, max: 105, spread: 5 }, 
+        "SW": { avg: 80, min: 70, max: 95, spread: 5 }, 
+        "Putter": { avg: 15, min: 5, max: 30, spread: 2 } 
+    }, 
+    "Mid": { 
+        "Driver": { avg: 230, min: 200, max: 250, spread: 10 }, 
+        "3 Wood": { avg: 210, min: 185, max: 225, spread: 9 }, 
+        "5 Wood": { avg: 195, min: 170, max: 210, spread: 8 }, 
+        "4 Hybrid": { avg: 185, min: 165, max: 200, spread: 8 }, 
+        "5 Hybrid": { avg: 175, min: 155, max: 190, spread: 8 }, 
+        "4 Iron": { avg: 185, min: 165, max: 200, spread: 7 }, 
+        "5 Iron": { avg: 175, min: 155, max: 190, spread: 6 }, 
+        "6 Iron": { avg: 165, min: 145, max: 180, spread: 6 }, 
+        "7 Iron": { avg: 155, min: 135, max: 170, spread: 5 }, 
+        "8 Iron": { avg: 145, min: 130, max: 160, spread: 5 }, 
+        "9 Iron": { avg: 135, min: 120, max: 150, spread: 4 }, 
+        "PW": { avg: 120, min: 105, max: 135, spread: 4 }, 
+        "GW": { avg: 105, min: 90, max: 120, spread: 4 }, 
+        "SW": { avg: 95, min: 80, max: 110, spread: 4 }, 
+        "Putter": { avg: 15, min: 5, max: 30, spread: 2 } 
+    }, 
+    "Low": { 
+        "Driver": { avg: 260, min: 240, max: 280, spread: 6 }, 
+        "3 Wood": { avg: 235, min: 220, max: 250, spread: 5 }, 
+        "5 Wood": { avg: 220, min: 205, max: 235, spread: 5 }, 
+        "4 Hybrid": { avg: 205, min: 190, max: 220, spread: 4 }, 
+        "5 Hybrid": { avg: 195, min: 180, max: 210, spread: 4 }, 
+        "4 Iron": { avg: 205, min: 190, max: 220, spread: 4 }, 
+        "5 Iron": { avg: 195, min: 180, max: 210, spread: 3 }, 
+        "6 Iron": { avg: 180, min: 165, max: 195, spread: 3 }, 
+        "7 Iron": { avg: 165, min: 150, max: 180, spread: 3 }, 
+        "8 Iron": { avg: 155, min: 140, max: 170, spread: 2 }, 
+        "9 Iron": { avg: 145, min: 130, max: 160, spread: 2 }, 
+        "PW": { avg: 130, min: 115, max: 145, spread: 2 }, 
+        "GW": { avg: 115, min: 100, max: 130, spread: 2 }, 
+        "SW": { avg: 105, min: 90, max: 120, spread: 2 }, 
+        "Putter": { avg: 15, min: 5, max: 30, spread: 2 } 
+    } 
 };
+
 const defaultBag = ["Driver", "3 Wood", "4 Hybrid", "5 Iron", "7 Iron", "8 Iron", "9 Iron", "PW", "SW", "Putter"];
 const masterClubOrder = ["Driver", "3 Wood", "5 Wood", "4 Hybrid", "5 Hybrid", "4 Iron", "5 Iron", "6 Iron", "7 Iron", "8 Iron", "9 Iron", "PW", "GW", "SW", "Putter"];
 
 function sortBag(bagArray) {
-    if(!Array.isArray(bagArray)) return defaultBag; 
+    if (!Array.isArray(bagArray)) {
+        return defaultBag; 
+    }
     return bagArray.sort((a, b) => {
         let idxA = masterClubOrder.indexOf(a); 
         let idxB = masterClubOrder.indexOf(b);
@@ -103,11 +181,15 @@ if (localStorage.getItem('castleDarganScorecard')) {
 
 function initPlayers() {
     activePlayers = [ { id: 'A', name: 'Me', hcp: parseInt(document.getElementById('player-a-hcp').value) || 18 } ];
+    
     ['B', 'C', 'D'].forEach(letter => {
         const name = document.getElementById(`player-${letter.toLowerCase()}-name`).value;
         const hcp = document.getElementById(`player-${letter.toLowerCase()}-hcp`).value;
-        if(name) activePlayers.push({ id: letter, name, hcp: parseInt(hcp) || 18 });
+        if (name) {
+            activePlayers.push({ id: letter, name, hcp: parseInt(hcp) || 18 });
+        }
     });
+    
     localStorage.setItem('castleDarganPlayers', JSON.stringify(activePlayers));
 }
 
@@ -120,9 +202,11 @@ function startUI() {
 document.getElementById('begin-round-btn').addEventListener('click', () => {
     localStorage.removeItem('castleDarganScorecard');
     localStorage.removeItem('castleDarganActiveRoundShots'); 
+    
     initPlayers();
     isPlannerMode = false; 
     document.getElementById('planner-banner').style.display = 'none';
+    
     startUI(); 
     initGPS();
 });
@@ -131,6 +215,7 @@ document.getElementById('resume-round-btn').addEventListener('click', () => {
     activePlayers = safeParse('castleDarganPlayers', [{ id: 'A', name: 'Me', hcp: 18 }]);
     isPlannerMode = false; 
     document.getElementById('planner-banner').style.display = 'none';
+    
     startUI(); 
     initGPS();
 });
@@ -139,7 +224,11 @@ document.getElementById('plan-round-btn').addEventListener('click', () => {
     initPlayers();
     isPlannerMode = true; 
     document.getElementById('planner-banner').style.display = 'block';
-    if(gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+    
+    if (gpsWatchId) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+    }
+    
     startUI(); 
 });
 
@@ -152,15 +241,19 @@ document.getElementById('quit-round-btn').addEventListener('click', () => {
     if(confirm("Are you sure you want to quit? This round and its tracked shots will NOT be saved.")) {
         localStorage.removeItem('castleDarganScorecard');
         localStorage.removeItem('castleDarganActiveRoundShots');
+        
         document.getElementById('active-round-ui').style.display = 'none';
         document.getElementById('start-round-screen').style.display = 'block';
         document.getElementById('resume-round-btn').style.display = 'none';
-        if(gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+        
+        if (gpsWatchId) {
+            navigator.geolocation.clearWatch(gpsWatchId);
+        }
     }
 });
 
 document.getElementById('tee-box-select').addEventListener('change', () => {
-    if(isPlannerMode) { 
+    if (isPlannerMode) { 
         hasCenteredMapThisHole = false; 
         updateHoleDisplay(); 
     } else { 
@@ -196,9 +289,17 @@ function switchTab(t) {
     document.getElementById(`tab-${t}`).classList.add('active'); 
     document.getElementById(`view-${t}`).classList.add('active');
     
-    if(t === 'play' && map) setTimeout(() => map.invalidateSize(), 100); 
-    if(t === 'history') renderHistoryTab();
-    if(t === 'settings') renderShotsList(); 
+    if (t === 'play' && map) {
+        setTimeout(() => map.invalidateSize(), 100); 
+    }
+    
+    if (t === 'history') {
+        renderHistoryTab();
+    }
+    
+    if (t === 'settings') {
+        renderShotsList(); 
+    }
 }
 
 function getBag() { 
@@ -215,6 +316,7 @@ function renderBagUI() {
     
     const overlaySelect = document.getElementById('club-overlay-select'); 
     const currentOverlay = overlaySelect.value;
+    
     overlaySelect.innerHTML = '<option value="">🎯 Range Overlay: Off</option>' + bag.map(c => `<option value="${c}">${c}</option>`).join('');
     overlaySelect.value = currentOverlay;
 
@@ -240,7 +342,9 @@ window.archiveClub = function(clubName) {
         const archiveDate = new Date().toLocaleDateString();
         
         shots.forEach(s => {
-            if (s.club === clubName) s.club = `${clubName} (Archived ${archiveDate})`;
+            if (s.club === clubName) {
+                s.club = `${clubName} (Archived ${archiveDate})`;
+            }
         });
         
         localStorage.setItem('castleDarganShots', JSON.stringify(shots));
@@ -253,13 +357,17 @@ window.archiveClub = function(clubName) {
 document.getElementById('add-club-btn').addEventListener('click', () => { 
     let bag = getBag(); 
     let nc = document.getElementById('new-club-select').value; 
-    if(!bag.includes(nc)) { bag.push(nc); saveBag(bag); }
+    if (!bag.includes(nc)) { 
+        bag.push(nc); 
+        saveBag(bag); 
+    }
 });
 
 document.getElementById('reset-bag-btn').addEventListener('click', () => saveBag(defaultBag));
 
 const handicapSelect = document.getElementById('handicap-select'); 
 handicapSelect.value = localStorage.getItem('castleDarganHandicap') || "High";
+
 handicapSelect.addEventListener('change', (e) => { 
     localStorage.setItem('castleDarganHandicap', e.target.value); 
     recommendClub(currentPlaysLike || parseInt(document.getElementById('distance-number').innerText)); 
@@ -296,13 +404,19 @@ window.deleteShot = function(originalIdx) {
         let shots = safeParse('castleDarganShots', []); 
         shots.splice(originalIdx, 1); 
         localStorage.setItem('castleDarganShots', JSON.stringify(shots));
+        
         renderShotsList(); 
         updateAnalytics(); 
-        if(currentPlaysLike) recommendClub(currentPlaysLike); 
+        
+        if (currentPlaysLike) {
+            recommendClub(currentPlaysLike); 
+        }
+        
         drawClubOverlay();
     }
 }
 
+// Data Export & Import
 document.getElementById('export-btn').addEventListener('click', () => {
     const backupData = { 
         shots: safeParse('castleDarganShots', []), 
@@ -368,14 +482,16 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
     return (toDegrees(Math.atan2(y, x)) + 360) % 360;
 }
 
-// NEW MATH: Calculates a destination coordinate given a starting point, distance, and angle.
+// Converts angle and distance into a GPS coordinate
 function getDestination(lat, lng, distMeters, bearingDeg) {
-    const R = 6371000;
-    const brng = toRadians(bearingDeg);
-    const lat1 = toRadians(lat);
+    const R = 6371000; 
+    const brng = toRadians(bearingDeg); 
+    const lat1 = toRadians(lat); 
     const lon1 = toRadians(lng);
+    
     const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distMeters/R) + Math.cos(lat1) * Math.sin(distMeters/R) * Math.cos(brng));
     const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distMeters/R) * Math.cos(lat1), Math.cos(distMeters/R) - Math.sin(lat1) * Math.sin(lat2));
+    
     return [toDegrees(lat2), toDegrees(lon2)];
 }
 
@@ -385,6 +501,7 @@ async function fetchWeather(lat, lng) {
         const data = await res.json();
         liveWindSpeed = Math.round(data.current.wind_speed_10m); 
         liveWindDir = data.current.wind_direction_10m;
+        
         document.getElementById('wind-speed-display').innerText = `${liveWindSpeed} mph`;
         document.getElementById('wind-dir-icon').innerHTML = `<span style="display:inline-block; transform: rotate(${liveWindDir}deg);">↓</span>`;
     } catch (err) { 
@@ -392,7 +509,9 @@ async function fetchWeather(lat, lng) {
     }
 }
 
-document.getElementById('refresh-weather-btn').addEventListener('click', () => { if(currentLat) fetchWeather(currentLat, currentLng); });
+document.getElementById('refresh-weather-btn').addEventListener('click', () => { 
+    if(currentLat) fetchWeather(currentLat, currentLng); 
+});
 
 function initMap() {
     map = L.map('map', { zoomControl: false }).setView([54.198, -8.430], 16);
@@ -400,6 +519,7 @@ function initMap() {
 
     const blueDot = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#3498db; width:22px; height:22px; border-radius:50%; border:3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5); cursor: grab; pointer-events: auto;'></div>", iconSize: [28,28] });
     const redPin = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#e74c3c; width:15px; height:15px; border-radius:50%; border:2px solid white;'></div>", iconSize: [15,15] });
+    
     yellowLayupIcon = L.divIcon({ className: 'custom-div-icon', html: "<div style='background-color:#f1c40f; width:12px; height:12px; border-radius:50%; border:2px solid white;'></div>", iconSize: [12,12] });
 
     userMarker = L.marker([0,0], {icon: blueDot, draggable: true}).addTo(map); 
@@ -408,20 +528,29 @@ function initMap() {
     pinMarker = L.marker([0,0], {icon: redPin}).addTo(map);
     pathLine = L.polyline([], {color: '#f39c12', dashArray: '5, 5', weight: 3}).addTo(map);
 
-    userMarker.on('dragend', function(e) { saveNewTeeLocation(e.target.getLatLng()); });
-    map.on('contextmenu', function(e) { saveNewTeeLocation(e.latlng); });
+    userMarker.on('dragend', function(e) { 
+        saveNewTeeLocation(e.target.getLatLng()); 
+    });
+    
+    map.on('contextmenu', function(e) { 
+        saveNewTeeLocation(e.latlng); 
+    });
 
     map.on('click', function(e) {
-        if(!currentLat) return;
-        if(layupMarker) map.removeLayer(layupMarker);
+        if (!currentLat) return;
         
-        layupMarker = L.marker(e.latlng, {icon: yellowLayupIcon}).addTo(map);
+        if (layupMarkers.length >= 3) {
+            return alert("Maximum of 3 layups allowed per hole.");
+        }
+        
+        let newMarker = L.marker(e.latlng, {icon: yellowLayupIcon}).addTo(map);
+        layupMarkers.push(newMarker);
         
         let savedLayups = safeParse('castleDarganLayups', {});
-        savedLayups[currentHoleIndex] = { lat: e.latlng.lat, lng: e.latlng.lng };
+        savedLayups[currentHoleIndex] = layupMarkers.map(m => ({lat: m.getLatLng().lat, lng: m.getLatLng().lng}));
         localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
         
-        updateLayupData(e.latlng.lat, e.latlng.lng);
+        updateLayupData();
     });
 }
 
@@ -429,7 +558,10 @@ function saveNewTeeLocation(latlng) {
     const selectedTee = document.getElementById('tee-box-select').value;
     let savedTees = safeParse('castleDarganTees', {});
     
-    if(!savedTees[currentHoleIndex]) savedTees[currentHoleIndex] = {};
+    if (!savedTees[currentHoleIndex]) {
+        savedTees[currentHoleIndex] = {};
+    }
+    
     const oldTee = savedTees[currentHoleIndex][selectedTee];
     
     savedTees[currentHoleIndex][selectedTee] = { lat: latlng.lat, lng: latlng.lng };
@@ -445,52 +577,117 @@ function saveNewTeeLocation(latlng) {
         updateHoleDisplay(); 
     });
     
-    if (isPlannerMode) processLocation(latlng.lat, latlng.lng);
+    if (isPlannerMode) {
+        processLocation(latlng.lat, latlng.lng);
+    }
 }
 
-function updateLayupData(layupLat, layupLng) {
+// Dynamic multi-node routing math
+function updateLayupData() {
+    if (layupMarkers.length === 0) {
+        document.getElementById('layup-info-box').style.display = 'none';
+        return;
+    }
+    
     document.getElementById('layup-info-box').style.display = 'block';
     
     let tLat = courseData[currentHoleIndex].lat;
     let tLng = courseData[currentHoleIndex].lng;
-    
     const customPins = safeParse('castleDarganPins', {});
+    
     if (customPins[currentHoleIndex]) { 
         tLat = customPins[currentHoleIndex].lat; 
         tLng = customPins[currentHoleIndex].lng; 
     }
 
-    const distToLayup = calculateDistance(currentLat, currentLng, layupLat, layupLng);
-    const distToPin = calculateDistance(layupLat, layupLng, tLat, tLng);
-    
-    const layupBearing = calculateBearing(currentLat, currentLng, layupLat, layupLng);
-    const layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed)));
-    
-    const pinBearing = calculateBearing(layupLat, layupLng, tLat, tLng);
-    const pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed)));
+    let points = [ {lat: currentLat, lng: currentLng} ];
+    layupMarkers.forEach(m => points.push({lat: m.getLatLng().lat, lng: m.getLatLng().lng}));
+    points.push({lat: tLat, lng: tLng});
 
-    const layupRec = getClubRecommendationData(layupPlaysLike); 
-    const pinRec = getClubRecommendationData(pinPlaysLike);
+    let html = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+            <h4 style="margin: 0; color: #2c3e50;">Layup Strategy</h4>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="undo-layup-btn-dynamic" style="background: none; border: none; color: #f39c12; font-size: 0.9rem; font-weight: bold; cursor: pointer; padding: 0;">↺ Undo</button>
+                <button id="clear-layup-btn-dynamic" style="background: none; border: none; color: #e74c3c; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 0.8;">&times;</button>
+            </div>
+        </div>
+        <div style="display: flex; overflow-x: auto; gap: 15px; padding-bottom: 5px;">
+    `;
+
+    for(let i=0; i < points.length - 1; i++) {
+        let start = points[i]; 
+        let end = points[i+1];
+        
+        let dist = calculateDistance(start.lat, start.lng, end.lat, end.lng);
+        let bearing = calculateBearing(start.lat, start.lng, end.lat, end.lng);
+        let playsLike = Math.max(0, Math.round(dist + (Math.cos(toRadians(liveWindDir - bearing)) * liveWindSpeed)));
+        
+        let rec = getClubRecommendationData(playsLike);
+        let title = (i === points.length - 2) ? "To Pin" : `To Layup ${i+1}`;
+        
+        html += `
+            <div style="min-width: 100px; flex: 1; border-right: ${i < points.length-2 ? '1px solid #eee' : 'none'}; padding-right: 10px;">
+                <b style="color: #2c3e50;">${i+1}. ${title}:</b> <span style="font-weight:bold;">${dist}</span>y<br>
+                <span style="color: #e67e22; font-size: 0.8rem;">(Plays ${playsLike}y)</span><br>
+                <strong style="color: #27ae60;">${rec ? rec.club : 'None'}</strong>
+            </div>`;
+    }
+    html += `</div>`;
     
-    document.getElementById('layup-dist').innerText = distToLayup; 
-    document.getElementById('layup-plays').innerText = layupPlaysLike;
-    document.getElementById('layup-club').innerText = layupRec ? layupRec.club : 'None';
+    document.getElementById('layup-info-box').innerHTML = html;
+    document.getElementById('clear-layup-btn-dynamic').addEventListener('click', window.clearLayups);
+    document.getElementById('undo-layup-btn-dynamic').addEventListener('click', window.undoLastLayup);
     
-    document.getElementById('layup-rem').innerText = distToPin; 
-    document.getElementById('layup-rem-plays').innerText = pinPlaysLike;
-    document.getElementById('layup-rem-club').innerText = pinRec ? pinRec.club : 'None';
+    if (currentLat && tLat) {
+        updateMapState(tLat, tLng);
+    }
+    
+    drawClubOverlay();
 }
 
-document.getElementById('clear-layup-btn').addEventListener('click', () => { 
-    document.getElementById('layup-info-box').style.display = 'none'; 
-    if(layupMarker) { map.removeLayer(layupMarker); layupMarker = null; }
+window.clearLayups = function() {
+    document.getElementById('layup-info-box').style.display = 'none';
+    
+    layupMarkers.forEach(m => map.removeLayer(m));
+    layupMarkers = [];
     
     let savedLayups = safeParse('castleDarganLayups', {});
     if(savedLayups[currentHoleIndex]) { 
         delete savedLayups[currentHoleIndex]; 
         localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups)); 
     }
-});
+    
+    let tLat = courseData[currentHoleIndex].lat; 
+    let tLng = courseData[currentHoleIndex].lng;
+    const customPins = safeParse('castleDarganPins', {});
+    
+    if (customPins[currentHoleIndex]) { 
+        tLat = customPins[currentHoleIndex].lat; 
+        tLng = customPins[currentHoleIndex].lng; 
+    }
+    
+    if(currentLat && tLat) updateMapState(tLat, tLng);
+    drawClubOverlay();
+};
+
+window.undoLastLayup = function() {
+    if (layupMarkers.length > 0) {
+        let lastMarker = layupMarkers.pop();
+        map.removeLayer(lastMarker);
+        
+        let savedLayups = safeParse('castleDarganLayups', {});
+        
+        if (layupMarkers.length > 0) {
+            savedLayups[currentHoleIndex] = layupMarkers.map(m => ({lat: m.getLatLng().lat, lng: m.getLatLng().lng}));
+        } else {
+            delete savedLayups[currentHoleIndex];
+        }
+        
+        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+        updateLayupData();
+    }
+};
 
 document.getElementById('recenter-map-btn').addEventListener('click', () => {
     hasCenteredMapThisHole = false; 
@@ -507,10 +704,18 @@ document.getElementById('recenter-map-btn').addEventListener('click', () => {
 });
 
 function updateMapState(tLat, tLng) {
-    if(!map) initMap();
-    if(currentLat) userMarker.setLatLng([currentLat, currentLng]); 
-    if(tLat) pinMarker.setLatLng([tLat, tLng]);
-    if(currentLat && tLat) pathLine.setLatLngs([[currentLat, currentLng], [tLat, tLng]]);
+    if (!map) initMap();
+    
+    if (currentLat) userMarker.setLatLng([currentLat, currentLng]); 
+    if (tLat) pinMarker.setLatLng([tLat, tLng]);
+    
+    // Line zigzags through all layups
+    if (currentLat && tLat) {
+        let pathPoints = [[currentLat, currentLng]];
+        layupMarkers.forEach(m => pathPoints.push([m.getLatLng().lat, m.getLatLng().lng]));
+        pathPoints.push([tLat, tLng]);
+        pathLine.setLatLngs(pathPoints);
+    }
     
     if (!hasCenteredMapThisHole && currentLat && tLat) { 
         map.fitBounds(L.latLngBounds([[currentLat, currentLng], [tLat, tLng]]), { padding: [20, 20], maxZoom: 18 }); 
@@ -518,65 +723,66 @@ function updateMapState(tLat, tLng) {
     }
 }
 
-// ==========================================
-// NEW: TARGET DISPERSION VISUAL CONE
-// ==========================================
 document.getElementById('club-overlay-select').addEventListener('change', drawClubOverlay);
 
 function drawClubOverlay() {
-    if(clubOverlayGroup && map) map.removeLayer(clubOverlayGroup); 
+    if (clubOverlayGroup && map) {
+        map.removeLayer(clubOverlayGroup); 
+    }
     
     const club = document.getElementById('club-overlay-select').value;
-    if(!club || !currentLat || !map) return;
+    if (!club || !currentLat || !map) return;
     
     const analytics = calculateDispersion(); 
     const data = analytics[club];
-    if(!data || !data.avg) return;
+    if (!data || !data.avg) return;
     
     clubOverlayGroup = L.layerGroup().addTo(map); 
     const center = [currentLat, currentLng];
 
-    // Determine target to point the cone at (Layup or Pin)
+    // Priority Target: First Layup, or the Pin
     let tLat = courseData[currentHoleIndex].lat;
     let tLng = courseData[currentHoleIndex].lng;
+    
     const customPins = safeParse('castleDarganPins', {});
     if (customPins[currentHoleIndex]) { 
         tLat = customPins[currentHoleIndex].lat; 
         tLng = customPins[currentHoleIndex].lng; 
     }
-    if (layupMarker) {
-        tLat = layupMarker.getLatLng().lat;
-        tLng = layupMarker.getLatLng().lng;
+    
+    if (layupMarkers.length > 0) {
+        tLat = layupMarkers[0].getLatLng().lat;
+        tLng = layupMarkers[0].getLatLng().lng;
     }
 
-    // Direction calculation
     const aimBearing = calculateBearing(currentLat, currentLng, tLat, tLng);
     
-    // Cone Width: Represents a typical amateur 10-degree left/right spread
-    const dispersionAngle = 10; 
+    // Dynamic Cone Spread: If user has spread data, use it. Otherwise default to 10 deg
+    const dispersionAngle = data.spread || 10; 
     
     const avgMeters = data.avg * 0.9144;
     const maxMeters = (data.max || data.avg + 20) * 0.9144;
     const minMeters = (data.min || data.avg - 20) * 0.9144;
 
-    // Project points forward
     const leftMax = getDestination(currentLat, currentLng, maxMeters, aimBearing - dispersionAngle);
     const rightMax = getDestination(currentLat, currentLng, maxMeters, aimBearing + dispersionAngle);
     const leftMin = getDestination(currentLat, currentLng, minMeters, aimBearing - dispersionAngle);
     const rightMin = getDestination(currentLat, currentLng, minMeters, aimBearing + dispersionAngle);
 
-    // 1. Draw The Left/Right Dispersion Cone
+    // Draw the Cone
     L.polygon([ center, leftMax, rightMax ], { 
-        color: '#3498db', weight: 1, fillOpacity: 0.15 
+        color: '#3498db', 
+        weight: 1, 
+        fillOpacity: 0.15 
     }).bindTooltip(`${club} Dispersion Zone`, {direction: 'top'}).addTo(clubOverlayGroup);
 
-    // 2. Draw Distance Arcs inside the cone
+    // Draw Min/Max Arcs
     if(data.max && data.min) {
         L.polyline([leftMin, rightMin], { color: '#e74c3c', weight: 3, dashArray: '5, 5' }).bindTooltip(`Min Distance`, {direction: 'top'}).addTo(clubOverlayGroup);
         L.polyline([leftMax, rightMax], { color: '#27ae60', weight: 3, dashArray: '5, 5' }).bindTooltip(`Max Distance`, {direction: 'top'}).addTo(clubOverlayGroup);
     }
     
-    // 3. Draw the Average Target Point
+    // Center Target Line
     const avgPoint = getDestination(currentLat, currentLng, avgMeters, aimBearing);
     L.polyline([center, avgPoint], { color: '#f1c40f', weight: 2, dashArray: '4, 4' }).addTo(clubOverlayGroup);
     L.circleMarker(avgPoint, {radius: 5, color: '#f1c40f', fillOpacity: 1}).bindTooltip(`Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
@@ -585,12 +791,15 @@ function drawClubOverlay() {
 function processLocation(lat, lng) {
     currentLat = lat; 
     currentLng = lng;
-    if(liveWindSpeed === 0) fetchWeather(currentLat, currentLng);
+    
+    if (liveWindSpeed === 0) {
+        fetchWeather(currentLat, currentLng);
+    }
     
     let tLat = courseData[currentHoleIndex].lat;
     let tLng = courseData[currentHoleIndex].lng;
-    const customPins = safeParse('castleDarganPins', {});
     
+    const customPins = safeParse('castleDarganPins', {});
     if (customPins[currentHoleIndex]) { 
         tLat = customPins[currentHoleIndex].lat; 
         tLng = customPins[currentHoleIndex].lng; 
@@ -606,7 +815,9 @@ function processLocation(lat, lng) {
     document.getElementById('distance-number').innerText = rawYardage > 0 ? rawYardage : "--"; 
 
     if (!isPlannerMode) {
-        if (rawYardage < 30) { hasReachedGreen = true; }
+        if (rawYardage < 30) { 
+            hasReachedGreen = true; 
+        }
         if (hasReachedGreen && rawYardage > 60) {
             hasReachedGreen = false;
             if (currentHoleIndex < courseData.length - 1) { 
@@ -622,25 +833,27 @@ function processLocation(lat, lng) {
     currentPlaysLike = Math.max(0, Math.round(rawYardage + effectiveWind)); 
     document.getElementById('plays-like-number').innerText = currentPlaysLike > 0 ? currentPlaysLike : "--";
 
-    if(tLat) updateMapState(tLat, tLng); 
+    if (tLat) {
+        updateMapState(tLat, tLng); 
+    }
+    
     recommendClub(currentPlaysLike);
     
+    // Load Multiple Layups Array from Storage
     const savedLayups = safeParse('castleDarganLayups', {});
-    if (savedLayups[currentHoleIndex] && map && yellowLayupIcon) {
-        const lLat = savedLayups[currentHoleIndex].lat; 
-        const lLng = savedLayups[currentHoleIndex].lng;
-        
-        if (!layupMarker) { 
-            layupMarker = L.marker([lLat, lLng], {icon: yellowLayupIcon}).addTo(map); 
-        } else { 
-            layupMarker.setLatLng([lLat, lLng]); 
-        }
-        updateLayupData(lLat, lLng);
+    
+    layupMarkers.forEach(m => { 
+        if(map) map.removeLayer(m); 
+    });
+    
+    layupMarkers = [];
+    
+    if (savedLayups[currentHoleIndex] && Array.isArray(savedLayups[currentHoleIndex]) && map && yellowLayupIcon) {
+        savedLayups[currentHoleIndex].forEach(l => {
+            layupMarkers.push(L.marker([l.lat, l.lng], {icon: yellowLayupIcon}).addTo(map));
+        });
+        updateLayupData();
     } else {
-        if(layupMarker) { 
-            map.removeLayer(layupMarker); 
-            layupMarker = null; 
-        }
         document.getElementById('layup-info-box').style.display = 'none';
     }
     
@@ -650,8 +863,13 @@ function processLocation(lat, lng) {
 function initGPS() {
     if ("geolocation" in navigator) {
         gpsWatchId = navigator.geolocation.watchPosition(
-            (pos) => { if(!isPlannerMode) processLocation(pos.coords.latitude, pos.coords.longitude); },
-            (err) => console.log("GPS Err"), { enableHighAccuracy: true, maximumAge: 0 } 
+            (pos) => { 
+                if(!isPlannerMode) {
+                    processLocation(pos.coords.latitude, pos.coords.longitude); 
+                }
+            },
+            (err) => console.log("GPS Err"), 
+            { enableHighAccuracy: true, maximumAge: 0 } 
         );
     }
 }
@@ -661,12 +879,12 @@ function initGPS() {
 // ==========================================
 document.getElementById('audio-caddy-btn').addEventListener('click', () => {
     const dist = document.getElementById('distance-number').innerText; 
-    if(dist === "--") return;
+    if (dist === "--") return;
     
     const playsLike = document.getElementById('plays-like-number').innerText; 
     const rec = getClubRecommendationData(currentPlaysLike);
-    let msg = `You have ${dist} yards to the pin. `;
     
+    let msg = `You have ${dist} yards to the pin. `;
     if (playsLike !== dist && playsLike !== "--") { 
         msg += `It is playing like ${playsLike} yards. `; 
     }
@@ -685,26 +903,54 @@ function calculateDispersion() {
     const clubData = {}; 
     
     bag.forEach(c => clubData[c] = []);
-    savedShots.forEach(s => { if(clubData[s.club]) clubData[s.club].push(s.distance); });
+    savedShots.forEach(s => { 
+        if(clubData[s.club]) {
+            clubData[s.club].push(s); // Push full shot object now to check accuracy tags
+        }
+    });
 
     const analytics = {};
+    
     bag.forEach(club => {
         const shots = clubData[club];
-        if(shots.length === 0) { 
-            analytics[club] = { type: 'baseline', avg: baselines[club] }; 
-        } else if (shots.length < 4) { 
-            analytics[club] = { type: 'raw', avg: Math.round(shots.reduce((a,b)=>a+b)/shots.length) }; 
+        
+        // Failsafe if baseline is missing
+        const safeBaseline = baselines[club] || { avg: 150, min: 120, max: 170, spread: 10 };
+
+        if (shots.length < 4) { 
+            analytics[club] = { 
+                type: 'baseline', 
+                avg: safeBaseline.avg,
+                min: safeBaseline.min,
+                max: safeBaseline.max,
+                spread: safeBaseline.spread
+            }; 
         } else {
-            shots.sort((a,b) => a-b); 
-            const coreShots = shots.slice(Math.floor(shots.length * 0.20), Math.floor(shots.length * 0.90));
+            // Sort by distance to find core averages
+            let sortedShots = [...shots].sort((a,b) => a.distance - b.distance); 
+            const coreShots = sortedShots.slice(Math.floor(sortedShots.length * 0.20), Math.floor(sortedShots.length * 0.90));
+            
+            // Calculate dynamic spread based on missed shots
+            let leftMisses = 0;
+            let rightMisses = 0;
+            shots.forEach(s => {
+                if(s.accuracy === 'Left Rough') leftMisses++;
+                if(s.accuracy === 'Right Rough') rightMisses++;
+            });
+            
+            let missRate = (leftMisses + rightMisses) / shots.length;
+            let calculatedSpread = 5 + (missRate * 15); // e.g. 5 degrees base + up to 15 degrees extra for wildness
+
             analytics[club] = { 
                 type: 'filtered', 
-                avg: Math.round(coreShots.reduce((a,b)=>a+b)/coreShots.length), 
-                min: coreShots[0], 
-                max: coreShots[coreShots.length-1] 
+                avg: Math.round(coreShots.reduce((a,b)=>a + b.distance, 0) / coreShots.length), 
+                min: coreShots[0].distance, 
+                max: coreShots[coreShots.length-1].distance,
+                spread: calculatedSpread
             };
         }
     }); 
+    
     return analytics;
 }
 
@@ -713,13 +959,18 @@ function getClubRecommendationData(targetYardage) {
     const analytics = calculateDispersion(); 
     let bestClub = "None", minDiff = Infinity;
     
-    for(const club in analytics) {
+    for (const club in analytics) {
         if (club === "Putter") continue; 
-        if(analytics[club].avg) {
+        
+        if (analytics[club].avg) {
             let diff = Math.abs(analytics[club].avg - targetYardage);
-            if (diff < minDiff) { minDiff = diff; bestClub = club; }
+            if (diff < minDiff) { 
+                minDiff = diff; 
+                bestClub = club; 
+            }
         }
     }
+    
     if (bestClub === "None") return null; 
     return { club: bestClub, data: analytics[bestClub] };
 }
@@ -728,9 +979,12 @@ function recommendClub(targetYardage) {
     const rec = getClubRecommendationData(targetYardage); 
     const recEl = document.getElementById('recommended-club');
     
-    if (!rec) { recEl.innerText = "Calculating..."; return; }
+    if (!rec) { 
+        recEl.innerText = "Calculating..."; 
+        return; 
+    }
     
-    if(rec.data.type === 'filtered') { 
+    if (rec.data.type === 'filtered') { 
         recEl.innerHTML = `${rec.club} <br><span style="font-size:0.8rem; color:#555;">Range: ${rec.data.min} - ${rec.data.max} Yds</span>`; 
     } else { 
         recEl.innerText = `${rec.club} (Avg: ${rec.data.avg || '--'} Yds)`; 
@@ -743,17 +997,19 @@ document.getElementById('track-btn').addEventListener('click', () => {
         shotStartLat = currentLat; 
         shotStartLng = currentLng;
         
-        if (layupMarker) { 
-            shotTargetLat = layupMarker.getLatLng().lat; 
-            shotTargetLng = layupMarker.getLatLng().lng; 
+        if (layupMarkers.length > 0) { 
+            shotTargetLat = layupMarkers[0].getLatLng().lat; 
+            shotTargetLng = layupMarkers[0].getLatLng().lng; 
         } else {
             let tLat = courseData[currentHoleIndex].lat;
             let tLng = courseData[currentHoleIndex].lng;
+            
             const customPins = safeParse('castleDarganPins', {});
             if (customPins[currentHoleIndex]) { 
                 tLat = customPins[currentHoleIndex].lat; 
                 tLng = customPins[currentHoleIndex].lng; 
             }
+            
             shotTargetLat = tLat; 
             shotTargetLng = tLng;
         }
@@ -795,6 +1051,7 @@ document.getElementById('track-btn').addEventListener('click', () => {
         
         document.getElementById('dispersion-text').innerText = missText; 
         document.getElementById('accuracy-select').value = autoAccuracy;
+        
         document.getElementById('track-btn').style.display = 'none'; 
         document.getElementById('shot-review-area').style.display = 'block'; 
     }
@@ -802,7 +1059,10 @@ document.getElementById('track-btn').addEventListener('click', () => {
 
 document.getElementById('save-shot-btn').addEventListener('click', () => {
     const club = document.getElementById('club-select').value; 
-    if (!club) return alert("Select a club!");
+    
+    if (!club) {
+        return alert("Select a club!");
+    }
     
     const oldShotsStr = localStorage.getItem('castleDarganShots'); 
     let bag = safeParse('castleDarganShots', []);
@@ -833,11 +1093,12 @@ document.getElementById('save-shot-btn').addEventListener('click', () => {
     resetTrackerUI();
     
     showToast("Shot Saved", () => {
-        if(oldShotsStr) {
+        if(oldShotsStr) { 
             localStorage.setItem('castleDarganShots', oldShotsStr); 
-        } else {
-            localStorage.removeItem('castleDarganShots');
+        } else { 
+            localStorage.removeItem('castleDarganShots'); 
         }
+        
         activeShots.pop(); 
         localStorage.setItem('castleDarganActiveRoundShots', JSON.stringify(activeShots));
         updateAnalytics(); 
@@ -873,22 +1134,22 @@ document.getElementById('update-tee-btn').addEventListener('click', () => {
     hasCenteredMapThisHole = false; 
     
     showToast("Tee Box Saved to Current Location!", () => {
-        if (oldTee) {
-            savedTees[currentHoleIndex][selectedTee] = oldTee;
-        } else {
-            delete savedTees[currentHoleIndex][selectedTee];
+        if (oldTee) { 
+            savedTees[currentHoleIndex][selectedTee] = oldTee; 
+        } else { 
+            delete savedTees[currentHoleIndex][selectedTee]; 
         }
         localStorage.setItem('castleDarganTees', JSON.stringify(savedTees)); 
         updateHoleDisplay(); 
-    });
+    }); 
     
     updateHoleDisplay(); 
 });
 
 document.getElementById('update-pin-btn').addEventListener('click', () => {
     if (!currentLat) return alert("Waiting for GPS...");
-    let customPins = safeParse('castleDarganPins', {});
-    customPins[currentHoleIndex] = { lat: currentLat, lng: currentLng };
+    let customPins = safeParse('castleDarganPins', {}); 
+    customPins[currentHoleIndex] = { lat: currentLat, lng: currentLng }; 
     localStorage.setItem('castleDarganPins', JSON.stringify(customPins));
     
     hasCenteredMapThisHole = false; 
@@ -902,17 +1163,18 @@ document.getElementById('reset-pin-btn').addEventListener('click', () => {
         localStorage.setItem('castleDarganPins', JSON.stringify(customPins)); 
     }
     
-    const selectedTee = document.getElementById('tee-box-select').value;
+    const selectedTee = document.getElementById('tee-box-select').value; 
     let customTees = safeParse('castleDarganTees', {});
-    if (customTees[currentHoleIndex] && customTees[currentHoleIndex][selectedTee]) {
-        delete customTees[currentHoleIndex][selectedTee];
-        localStorage.setItem('castleDarganTees', JSON.stringify(customTees));
+    
+    if (customTees[currentHoleIndex] && customTees[currentHoleIndex][selectedTee]) { 
+        delete customTees[currentHoleIndex][selectedTee]; 
+        localStorage.setItem('castleDarganTees', JSON.stringify(customTees)); 
     }
     
     let savedLayups = safeParse('castleDarganLayups', {});
-    if(savedLayups[currentHoleIndex]) {
-        delete savedLayups[currentHoleIndex];
-        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
+    if(savedLayups[currentHoleIndex]) { 
+        delete savedLayups[currentHoleIndex]; 
+        localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups)); 
     }
 
     hasCenteredMapThisHole = false; 
@@ -926,66 +1188,92 @@ function updateHoleDisplay() {
     const hd = courseData[currentHoleIndex]; 
     const selectedTee = document.getElementById('tee-box-select').value;
     const activePar = selectedTee === 'red' ? hd.redPar : hd.par; 
-    const activeSi = selectedTee === 'red' ? hd.redSi : hd.si;
+    const activeSi = selectedTee === 'red' ? hd.redSi : hd.si; 
     const officialYardage = hd.yds[selectedTee]; 
 
     document.getElementById('current-hole').innerText = `Hole ${hd.hole}`;
     document.getElementById('hole-par-display').innerText = `Par ${activePar} | SI ${activeSi} | ${officialYardage}y`;
     document.getElementById('scorecard-hole-num').innerText = hd.hole;
     
-    if(layupMarker) { map.removeLayer(layupMarker); layupMarker = null; }
+    layupMarkers.forEach(m => { 
+        if(map) map.removeLayer(m); 
+    }); 
+    layupMarkers = [];
+    
     document.getElementById('layup-info-box').style.display = 'none';
     
     renderMultiplayerScorecard();
 
     if (isPlannerMode) {
-        if(userMarker) { userMarker.dragging.enable(); }
-        const savedTees = safeParse('castleDarganTees', {});
+        if (userMarker) { 
+            userMarker.dragging.enable(); 
+        }
+        const savedTees = safeParse('castleDarganTees', {}); 
         let teeCoords = hd.tees[selectedTee];
+        
         if (savedTees[currentHoleIndex] && savedTees[currentHoleIndex][selectedTee]) { 
             teeCoords = savedTees[currentHoleIndex][selectedTee]; 
         }
         processLocation(teeCoords.lat, teeCoords.lng);
     } else {
-        if(userMarker) { userMarker.dragging.disable(); }
+        if (userMarker) { 
+            userMarker.dragging.disable(); 
+        }
         
-        let tLat = courseData[currentHoleIndex].lat;
+        let tLat = courseData[currentHoleIndex].lat; 
         let tLng = courseData[currentHoleIndex].lng;
-        const customPins = safeParse('castleDarganPins', {});
+        
+        const customPins = safeParse('castleDarganPins', {}); 
         if (customPins[currentHoleIndex]) { 
             tLat = customPins[currentHoleIndex].lat; 
             tLng = customPins[currentHoleIndex].lng; 
         }
-        if(currentLat && tLat) updateMapState(tLat, tLng);
+        
+        if (currentLat && tLat) {
+            updateMapState(tLat, tLng);
+        }
     }
 }
 
 document.getElementById('next-hole').addEventListener('click', () => { 
-    if (currentHoleIndex < courseData.length - 1) { currentHoleIndex++; updateHoleDisplay(); }
+    if (currentHoleIndex < courseData.length - 1) { 
+        currentHoleIndex++; 
+        updateHoleDisplay(); 
+    }
 });
+
 document.getElementById('prev-hole').addEventListener('click', () => { 
-    if (currentHoleIndex > 0) { currentHoleIndex--; updateHoleDisplay(); }
+    if (currentHoleIndex > 0) { 
+        currentHoleIndex--; 
+        updateHoleDisplay(); 
+    }
 });
 
 function calculateStableford(gross, par, si, playerHcp) {
     if (!gross || gross <= 0) return 0;
+    
     let strokesRec = Math.floor(playerHcp / 18); 
-    if ((playerHcp % 18) >= si) strokesRec += 1;
+    if ((playerHcp % 18) >= si) {
+        strokesRec += 1;
+    }
+    
     return Math.max(0, 2 - ((gross - strokesRec) - par));
 }
 
 function renderMultiplayerScorecard() {
     const wrap = document.getElementById('multiplayer-scorecard-wrapper');
-    const sc = safeParse('castleDarganScorecard', {});
+    const sc = safeParse('castleDarganScorecard', {}); 
     const holeData = sc[currentHoleIndex] || {};
+    
     const hd = courseData[currentHoleIndex]; 
     const selectedTee = document.getElementById('tee-box-select').value;
     const activePar = selectedTee === 'red' ? hd.redPar : hd.par; 
     const activeSi = selectedTee === 'red' ? hd.redSi : hd.si;
 
     let html = '';
+    
     activePlayers.forEach(p => {
-        let strokes = holeData[p.id]?.strokes || '';
+        let strokes = holeData[p.id]?.strokes || ''; 
         let pts = holeData[p.id]?.points || 0;
         let color = p.id === 'A' ? '#27ae60' : p.id === 'B' ? '#3498db' : p.id === 'C' ? '#9b59b6' : '#e67e22';
 
@@ -994,32 +1282,27 @@ function renderMultiplayerScorecard() {
             <div style="flex:2; font-weight:bold; color:#2c3e50; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                 <span style="color:${color}; margin-right:5px;">${p.id}</span>${p.name} <span style="font-size:0.7rem; color:#7f8c8d;">(Hcp ${p.hcp})</span>
             </div>
-            <div style="flex:1; min-width:0;">
-                <input type="number" id="strokes-${p.id}" value="${strokes}" placeholder="Strokes" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing:border-box;" oninput="updatePlayerScore('${p.id}', ${p.hcp}, ${activePar}, ${activeSi})">
-            </div>
+            <div style="flex:1; min-width:0;"><input type="number" id="strokes-${p.id}" value="${strokes}" placeholder="Strokes" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing:border-box;" oninput="updatePlayerScore('${p.id}', ${p.hcp}, ${activePar}, ${activeSi})"></div>
             <div style="flex:1; min-width:0; text-align:right; font-weight:bold; color:#3498db; white-space:nowrap;" id="pts-${p.id}">${pts} Pts</div>
         </div>`;
 
         if (p.id === 'A') {
-             let putts = holeData[p.id]?.putts || '';
+             let putts = holeData[p.id]?.putts || ''; 
              let gir = holeData[p.id]?.gir ? 'checked' : '';
+             
              html += `
              <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:2px solid #ccc; margin-bottom:10px; background:#f9f9f9; gap:8px;">
                 <div style="flex:2; font-size:0.85rem; color:#7f8c8d; text-align:right; min-width:0;">My Putts/GIR:</div>
-                <div style="flex:1; min-width:0;">
-                    <input type="number" id="putts-A" value="${putts}" placeholder="Putts" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing:border-box;" oninput="updatePlayerScore('A', ${p.hcp}, ${activePar}, ${activeSi})">
-                </div>
-                <div style="flex:1; text-align:center; min-width:0;">
-                    <input type="checkbox" id="gir-A" ${gir} style="width:25px; height:25px;">
-                </div>
+                <div style="flex:1; min-width:0;"><input type="number" id="putts-A" value="${putts}" placeholder="Putts" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing:border-box;" oninput="updatePlayerScore('A', ${p.hcp}, ${activePar}, ${activeSi})"></div>
+                <div style="flex:1; text-align:center; min-width:0;"><input type="checkbox" id="gir-A" ${gir} style="width:25px; height:25px;"></div>
              </div>`;
         }
-    });
+    }); 
     wrap.innerHTML = html;
 }
 
 window.updatePlayerScore = function(playerId, hcp, par, si) {
-    const strokes = parseInt(document.getElementById(`strokes-${playerId}`).value);
+    const strokes = parseInt(document.getElementById(`strokes-${playerId}`).value); 
     const ptsEl = document.getElementById(`pts-${playerId}`);
     
     if (strokes) { 
@@ -1027,10 +1310,12 @@ window.updatePlayerScore = function(playerId, hcp, par, si) {
     } else { 
         ptsEl.innerText = "0 Pts"; 
     }
-
+    
     if (playerId === 'A') {
         const putts = parseInt(document.getElementById('putts-A').value);
-        if (strokes && putts >= 0) document.getElementById('gir-A').checked = ((strokes - putts) <= (par - 2));
+        if (strokes && putts >= 0) {
+            document.getElementById('gir-A').checked = ((strokes - putts) <= (par - 2));
+        }
     }
 }
 
@@ -1044,28 +1329,34 @@ document.getElementById('save-score-btn').addEventListener('click', () => {
     const activeSi = selectedTee === 'red' ? hd.redSi : hd.si;
 
     let holeScores = {};
+    
     activePlayers.forEach(p => {
         let strokes = parseInt(document.getElementById(`strokes-${p.id}`).value);
         if (strokes) {
-            holeScores[p.id] = { strokes: strokes, points: calculateStableford(strokes, activePar, activeSi, p.hcp) };
-            if (p.id === 'A') {
-                holeScores[p.id].putts = parseInt(document.getElementById('putts-A').value) || 0;
-                holeScores[p.id].gir = document.getElementById('gir-A').checked;
+            holeScores[p.id] = { 
+                strokes: strokes, 
+                points: calculateStableford(strokes, activePar, activeSi, p.hcp) 
+            };
+            if (p.id === 'A') { 
+                holeScores[p.id].putts = parseInt(document.getElementById('putts-A').value) || 0; 
+                holeScores[p.id].gir = document.getElementById('gir-A').checked; 
             }
         }
     });
 
-    if(Object.keys(holeScores).length === 0) return alert("Enter strokes for at least one player!");
-
-    scorecard[currentHoleIndex] = holeScores;
+    if (Object.keys(holeScores).length === 0) {
+        return alert("Enter strokes for at least one player!");
+    }
+    
+    scorecard[currentHoleIndex] = holeScores; 
     localStorage.setItem('castleDarganScorecard', JSON.stringify(scorecard));
     updateAnalytics(); 
     
     showToast("Hole Score Saved", () => {
-        if(oldScorecardStr) {
+        if(oldScorecardStr) { 
             localStorage.setItem('castleDarganScorecard', oldScorecardStr); 
-        } else {
-            localStorage.removeItem('castleDarganScorecard');
+        } else { 
+            localStorage.removeItem('castleDarganScorecard'); 
         }
         updateHoleDisplay(); 
         updateAnalytics();
@@ -1076,10 +1367,8 @@ document.getElementById('save-score-btn').addEventListener('click', () => {
 // 8. ANALYTICS & HISTORY
 // ==========================================
 function updateAnalytics() {
-    const scorecard = safeParse('castleDarganScorecard', {});
-    let totStrokes = 0, totPts = 0, holesPlayed = 0, girCount = 0;
-    
-    let totPar = 0; 
+    const scorecard = safeParse('castleDarganScorecard', {}); 
+    let totStrokes = 0, totPts = 0, holesPlayed = 0, girCount = 0, totPar = 0; 
     const selectedTee = document.getElementById('tee-box-select').value;
 
     for (let k in scorecard) {
@@ -1097,45 +1386,95 @@ function updateAnalytics() {
     if (holesPlayed > 0 && statScoreEl) {
         let stp = totStrokes - totPar; 
         statScoreEl.innerText = stp > 0 ? `+${stp}` : (stp === 0 ? "E" : stp);
-        document.getElementById('stat-gir').innerText = Math.round((girCount / holesPlayed) * 100) + "%";
+        document.getElementById('stat-gir').innerText = Math.round((girCount / holesPlayed) * 100) + "%"; 
         document.getElementById('stat-points').innerText = totPts;
     } else if (statScoreEl) {
         statScoreEl.innerText = "E"; 
         document.getElementById('stat-gir').innerText = "0%"; 
         document.getElementById('stat-points').innerText = "0";
     }
+    
+    // Process Miss Tendency Chart default
+    const shots = safeParse('castleDarganShots', []);
+    let driveCount = 0, fairwayCount = 0; 
+    let missStats = { fairway: 0, left: 0, right: 0, other: 0 };
+    
+    shots.forEach(s => {
+        if (s.club === "Driver" || s.club.includes("Wood")) { 
+            driveCount++; 
+            if (s.accuracy === "Fairway") { fairwayCount++; missStats.fairway++; }
+            else if (s.accuracy === "Left Rough") missStats.left++;
+            else if (s.accuracy === "Right Rough") missStats.right++;
+            else missStats.other++; 
+        }
+    });
+    
+    if (driveCount === 0) {
+        // Default to a classic beginner slice so the chart looks good before data is gathered
+        missStats = { fairway: 20, left: 15, right: 55, other: 10 };
+    }
+
+    if (driveCount > 0) {
+        document.getElementById('stat-fir').innerText = Math.round((fairwayCount / driveCount) * 100) + "%";
+    }
+
+    if (document.getElementById('missTendencyChart')) {
+        const ctxMiss = document.getElementById('missTendencyChart').getContext('2d');
+        if (missTendencyChartInstance) {
+            missTendencyChartInstance.destroy();
+        }
+        
+        missTendencyChartInstance = new Chart(ctxMiss, {
+            type: 'doughnut',
+            data: { 
+                labels: ['Fairway', 'Left', 'Right', 'Short/OB'], 
+                datasets: [{ 
+                    data: [missStats.fairway, missStats.left, missStats.right, missStats.other], 
+                    backgroundColor: ['#27ae60', '#e74c3c', '#f39c12', '#95a5a6'], 
+                    borderWidth: 1 
+                }] 
+            },
+            options: { plugins: { legend: { position: 'bottom' } }, cutout: '70%', responsive: true }
+        });
+    }
 }
 
 document.getElementById('end-round-btn').addEventListener('click', () => {
     const scorecard = safeParse('castleDarganScorecard', {});
-    if (!scorecard || Object.keys(scorecard).length === 0) return alert("No scores saved!");
+    if (!scorecard || Object.keys(scorecard).length === 0) {
+        return alert("No scores saved!");
+    }
     
     if (confirm("End this round and save to History?")) {
         let totPts = 0, totStrokes = 0; 
+        
         for (let k in scorecard) { 
             if(scorecard[k]['A']) { 
                 totPts += scorecard[k]['A'].points; 
                 totStrokes += scorecard[k]['A'].strokes; 
-            }
+            } 
         }
         
         let history = safeParse('castleDarganHistory', []);
+        
         history.push({ 
             date: new Date().toLocaleDateString(), 
             holesPlayed: Object.keys(scorecard).length, 
             points: totPts, 
-            strokes: totStrokes,
-            shots: safeParse('castleDarganActiveRoundShots', [])
+            strokes: totStrokes, 
+            shots: safeParse('castleDarganActiveRoundShots', []) 
         });
+        
         localStorage.setItem('castleDarganHistory', JSON.stringify(history));
         
         localStorage.removeItem('castleDarganScorecard'); 
         localStorage.removeItem('castleDarganActiveRoundShots'); 
+        
         updateHoleDisplay(); 
         updateAnalytics();
         
-        document.getElementById('active-round-ui').style.display = 'none';
-        document.getElementById('start-round-screen').style.display = 'block';
+        document.getElementById('active-round-ui').style.display = 'none'; 
+        document.getElementById('start-round-screen').style.display = 'block'; 
         document.getElementById('resume-round-btn').style.display = 'none';
         
         switchTab('history');
@@ -1144,7 +1483,7 @@ document.getElementById('end-round-btn').addEventListener('click', () => {
 
 window.deleteRound = function(originalIndex) {
     if (confirm("Permanently delete this round?")) {
-        let history = safeParse('castleDarganHistory', []);
+        let history = safeParse('castleDarganHistory', []); 
         history.splice(originalIndex, 1); 
         localStorage.setItem('castleDarganHistory', JSON.stringify(history)); 
         renderHistoryTab();
@@ -1153,44 +1492,50 @@ window.deleteRound = function(originalIndex) {
 
 window.viewShotTracers = function(idx) {
     document.getElementById('tracer-modal').style.display = 'flex';
-    const history = safeParse('castleDarganHistory', []);
+    
+    const history = safeParse('castleDarganHistory', []); 
     const round = history[idx];
 
-    if(!tracerMap) {
+    if (!tracerMap) {
         tracerMap = L.map('history-map', {zoomControl: false}).setView([54.198, -8.430], 15);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' }).addTo(tracerMap);
     }
     
     setTimeout(() => { tracerMap.invalidateSize(); }, 200);
 
-    tracerMap.eachLayer(layer => {
+    tracerMap.eachLayer(layer => { 
         if (layer instanceof L.Polyline || layer instanceof L.Marker || layer instanceof L.CircleMarker) { 
             tracerMap.removeLayer(layer); 
-        }
+        } 
     });
-
-    if(!round.shots || round.shots.length === 0) return alert("No shot path data for this round.");
+    
+    if(!round.shots || round.shots.length === 0) {
+        return alert("No shot path data for this round.");
+    }
 
     let bounds = [];
     round.shots.forEach(s => {
-        if(s.startLat && s.endLat) {
+        if (s.startLat && s.endLat) {
             let lineColor = s.accuracy.includes('Rough') || s.accuracy.includes('Hazard') ? '#e74c3c' : '#27ae60';
             
             L.polyline([[s.startLat, s.startLng], [s.endLat, s.endLng]], { 
                 color: lineColor, weight: 3, opacity: 0.8, dashArray: '5, 5' 
             }).bindTooltip(`Hole ${s.hole}: ${s.club} (${s.distance}y)`).addTo(tracerMap);
             
-            L.circleMarker([s.endLat, s.endLng], {radius: 4, color: '#f1c40f', fillOpacity: 1}).addTo(tracerMap);
+            L.circleMarker([s.endLat, s.endLng], {radius: 4, color: '#f1c40f', fillOpacity: 1}).addTo(tracerMap); 
             bounds.push([s.startLat, s.startLng], [s.endLat, s.endLng]);
         }
     });
     
-    if(bounds.length > 0) tracerMap.fitBounds(bounds, {padding: [30, 30]});
+    if (bounds.length > 0) {
+        tracerMap.fitBounds(bounds, {padding: [30, 30]});
+    }
 };
 
 function renderHistoryTab() {
     const history = safeParse('castleDarganHistory', []); 
     const listEl = document.getElementById('past-rounds-list');
+    
     updateAnalytics(); 
 
     if (history.length === 0) { 
@@ -1199,7 +1544,8 @@ function renderHistoryTab() {
     }
     
     listEl.innerHTML = ''; 
-    const labels = [], dataPoints = [];
+    const labels = [];
+    const dataPoints = [];
     
     [...history].reverse().forEach((r, reversedIdx) => {
         const originalIdx = history.length - 1 - reversedIdx; 
@@ -1222,7 +1568,9 @@ function renderHistoryTab() {
     });
 
     const ctx = document.getElementById('historyChart').getContext('2d');
-    if (historyChartInstance) historyChartInstance.destroy();
+    if (historyChartInstance) {
+        historyChartInstance.destroy();
+    }
     
     historyChartInstance = new Chart(ctx, {
         type: 'line',

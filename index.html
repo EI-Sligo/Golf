@@ -80,7 +80,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="text-align: left; line-height: 1.2;">
                         <span style="font-weight: bold;">PLANNER MODE</span><br>
-                        <span style="font-size: 0.8rem;">Right-click (or long-press) map to move Tee</span>
+                        <span style="font-size: 0.8rem;">Right-click map to move Tee | Tap to set route</span>
                     </div>
                     <button id="exit-planner-btn" style="background: #fff; color: #f39c12; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; cursor: pointer;">Exit</button>
                 </div>
@@ -103,23 +103,9 @@
                 <button id="recenter-map-btn" style="position: absolute; bottom: 15px; right: 15px; z-index: 1000; background: white; border: none; border-radius: 8px; padding: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 1.2rem;">🎯</button>
             </div>
 
+            <!-- MULTI-LAYUP DYNAMIC BOX -->
             <div id="layup-info-box" style="display: none; background: #fff; border-left: 5px solid #f1c40f; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <h4 style="margin: 0 0 10px 0; color: #2c3e50;">Layup Strategy</h4>
-                    <button id="clear-layup-btn" style="background: none; border: none; color: #e74c3c; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 0.8;">&times;</button>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.95rem;">
-                    <div style="flex: 1; padding-right: 10px;">
-                        <b style="color: #2c3e50;">1. To Layup:</b> <span id="layup-dist" style="font-weight:bold;">--</span>y<br>
-                        <span style="color: #e67e22; font-size: 0.8rem;">(Plays <span id="layup-plays">--</span>y)</span><br>
-                        <strong style="color: #27ae60;" id="layup-club">--</strong>
-                    </div>
-                    <div style="flex: 1; border-left: 1px solid #eee; padding-left: 10px;">
-                        <b style="color: #2c3e50;">2. To Pin:</b> <span id="layup-rem" style="font-weight:bold;">--</span>y<br>
-                        <span style="color: #e67e22; font-size: 0.8rem;">(Plays <span id="layup-rem-plays">--</span>y)</span><br>
-                        <strong style="color: #27ae60;" id="layup-rem-club">--</strong>
-                    </div>
-                </div>
+                <!-- Populated by JavaScript -->
             </div>
 
             <section class="gps-display card">
@@ -260,7 +246,6 @@
             </div>
         </section>
         
-        <!-- BAG BUILDER -->
         <section class="settings card">
             <h3>Bag Builder & Archiving</h3>
             <p style="font-size: 0.85rem; color: #555; margin-top: 0; margin-bottom: 15px;">Tap 🗄️ to Archive a club. It saves history but resets your current Caddy averages.</p>
