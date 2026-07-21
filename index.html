@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Castle Dargan Caddy</title>
-    
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
     <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Golf_flag.svg/512px-Golf_flag.svg.png">
@@ -63,12 +62,15 @@
 
         <section class="gps-display card">
             <p style="margin-top: 0; color: #7f8c8d; font-weight: bold; text-transform: uppercase; font-size: 0.8rem;">Distance to Pin</p>
-            <div class="yardage" style="margin-top: -10px;"><span id="distance-number">--</span><span class="unit">Yds</span></div>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: -10px;">
+                <div class="yardage" style="margin: 0;"><span id="distance-number">--</span><span class="unit">Yds</span></div>
+                <button id="audio-caddy-btn" style="background: #2c3e50; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 1.4rem; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.15);" title="Audio Caddy">🔊</button>
+            </div>
             
             <div class="plays-like-box">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-size: 0.9rem; color: #555;">Wind: <strong id="wind-speed-display">-- mph</strong> <span id="wind-dir-icon"></span></span>
-                    <button id="refresh-weather-btn" style="background: none; border: none; color: #3498db; cursor: pointer;">↻ Refresh</button>
+                    <button id="refresh-weather-btn" style="background: none; border: none; color: #3498db; cursor: pointer;">↻</button>
                 </div>
                 <h3 style="margin: 10px 0 0 0; color: #e67e22; font-size: 1.5rem;">Plays Like: <span id="plays-like-number">--</span> Yds</h3>
             </div>
@@ -78,7 +80,7 @@
             </div>
             <div class="pin-controls">
                 <button id="update-pin-btn" class="action-btn blue-btn">Set Custom Pin</button>
-                <button id="reset-pin-btn" class="action-btn gray-btn">Reset to Center</button>
+                <button id="reset-pin-btn" class="action-btn gray-btn">Reset</button>
             </div>
         </section>
 
@@ -92,10 +94,10 @@
                     <label>Accuracy:</label>
                     <select id="accuracy-select">
                         <option value="Fairway">Fairway / Target</option>
-                        <option value="Left Rough">Left Rough</option>
-                        <option value="Right Rough">Right Rough</option>
-                        <option value="Hazard">Hazard/OB</option>
+                        <option value="Left Rough">Left Miss (Rough/Hazard)</option>
+                        <option value="Right Rough">Right Miss (Rough/Hazard)</option>
                         <option value="Green">On the Green</option>
+                        <option value="Short/Long">Short or Long</option>
                     </select>
                     <div class="pin-controls" style="margin-top: 15px;">
                         <button id="save-shot-btn" class="action-btn blue-btn">Save</button>
@@ -119,11 +121,11 @@
         </section>
 
         <section class="analytics card">
-            <h3>My Analytics (This Round)</h3>
+            <h3>Live Round Stats</h3>
             <div class="stats-grid">
-                <div class="stat-box"><span>Score To Par</span><strong id="stat-score">E</strong></div>
-                <div class="stat-box"><span>Total Pts</span><strong id="stat-points" style="color: #3498db;">0</strong></div>
-                <div class="stat-box"><span>Fairways</span><strong id="stat-fir">0%</strong></div>
+                <div class="stat-box"><span>To Par</span><strong id="stat-score">E</strong></div>
+                <div class="stat-box"><span>Pts</span><strong id="stat-points" style="color: #3498db;">0</strong></div>
+                <div class="stat-box"><span>FIR</span><strong id="stat-fir">0%</strong></div>
                 <div class="stat-box"><span>GIR</span><strong id="stat-gir">0%</strong></div>
             </div>
         </section>
@@ -137,8 +139,15 @@
     <main id="view-history" class="view-section">
         <section class="card">
             <h3>Scoring Trends</h3>
-            <canvas id="historyChart" width="400" height="250"></canvas>
+            <canvas id="historyChart" width="400" height="200"></canvas>
         </section>
+        
+        <section class="card" style="text-align: center;">
+            <h3 style="margin-top: 0; color: #2c3e50;">Driving Tendencies</h3>
+            <p style="font-size: 0.85rem; color: #7f8c8d; margin-top: -10px;">Where do your woods & drivers miss?</p>
+            <canvas id="missTendencyChart" style="max-height: 200px; margin: 0 auto;"></canvas>
+        </section>
+
         <section class="card">
             <h3>Past Rounds</h3>
             <div id="past-rounds-list"></div>
@@ -149,6 +158,14 @@
     <!-- VIEW: SETTINGS -->
     <!-- ========================================== -->
     <main id="view-settings" class="view-section">
+        
+        <!-- MOVED TO THE TOP -->
+        <section class="settings card" style="border: 2px solid #e74c3c;">
+            <h3 style="color: #e74c3c; margin-top: 0;">Manage Tracked Shots</h3>
+            <p style="font-size: 0.85rem; color: #555; margin-top: 0;">Delete bad data (like 0-yard misclicks) to instantly fix your Caddy averages.</p>
+            <div id="tracked-shots-list" style="max-height: 250px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 10px;"></div>
+        </section>
+
         <section class="settings card">
             <h3>Player Profile</h3>
             <div class="setting-group">
@@ -158,9 +175,9 @@
             <div class="setting-group">
                 <label>Baseline Yardages:</label>
                 <select id="handicap-select">
-                    <option value="High">High</option>
-                    <option value="Mid">Mid</option>
-                    <option value="Low">Low</option>
+                    <option value="High">High Handicap</option>
+                    <option value="Mid">Mid Handicap</option>
+                    <option value="Low">Low Handicap</option>
                 </select>
             </div>
         </section>
@@ -179,15 +196,6 @@
             </div>
             <div id="my-bag-list" class="bag-list"></div>
             <button id="reset-bag-btn" style="margin-top: 10px; font-size: 0.8rem; color: #e74c3c; background: none; border: none; text-decoration: underline; cursor: pointer;">Reset Bag</button>
-        </section>
-
-        <!-- NEW: Manage Tracked Shots -->
-        <section class="settings card">
-            <h3>Manage Tracked Shots</h3>
-            <p style="font-size: 0.85rem; color: #555; margin-top: 0;">Delete bad data (like a 0-yard misclick) to fix your club averages.</p>
-            <div id="tracked-shots-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 10px;">
-                <!-- JS will populate this -->
-            </div>
         </section>
 
         <section class="settings card">
