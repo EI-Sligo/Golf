@@ -99,16 +99,39 @@ function sortBag(bagArray) {
     });
 }
 
-// Helper to get active Tee coordinates for current hole
-function getActiveTeeCoords() {
+// ==========================================
+// DATA SANITIZERS (Fixes Corrupted LocalStorage)
+// ==========================================
+function getValidTeeCoords() {
     const hd = courseData[currentHoleIndex];
     const selectedTee = document.getElementById('tee-box-select').value;
     const customTees = safeParse('castleDarganTees', {});
     if (customTees[currentHoleIndex] && customTees[currentHoleIndex][selectedTee]) {
-        return customTees[currentHoleIndex][selectedTee];
+        let t = customTees[currentHoleIndex][selectedTee];
+        if (t && typeof t.lat === 'number' && typeof t.lng === 'number' && !isNaN(t.lat) && !isNaN(t.lng)) return t;
     }
     return hd.tees[selectedTee];
 }
+
+function getValidPinCoords() {
+    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
+    const customPins = safeParse('castleDarganPins', {});
+    if (customPins[currentHoleIndex]) { 
+        let p = customPins[currentHoleIndex];
+        if (p && typeof p.lat === 'number' && typeof p.lng === 'number' && !isNaN(p.lat) && !isNaN(p.lng)) {
+            tLat = p.lat; tLng = p.lng;
+        }
+    }
+    return { lat: tLat, lng: tLng };
+}
+
+function getValidLayups() {
+    let savedLayups = safeParse('castleDarganLayups', {});
+    let route = savedLayups[currentHoleIndex] || [];
+    // Strict filter removes any legacy null or NaN layups that crash Leaflet
+    return route.filter(pt => pt && typeof pt.lat === 'number' && typeof pt.lng === 'number' && !isNaN(pt.lat) && !isNaN(pt.lng));
+}
+
 
 // ==========================================
 // 2. MULTIPLAYER START SCREEN
@@ -324,7 +347,7 @@ function getDestination(lat, lng, distMeters, bearingDeg) {
 }
 
 async function fetchWeather(lat, lng) {
-    if (!lat || !lng) return; // Strict Guard Clause against 400 Bad Request
+    if (!lat || !lng) return; 
     try {
         const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=mph`);
         const data = await res.json();
@@ -353,18 +376,22 @@ function initMap() {
     map.on('click', function(e) {
         if (isPlannerMode) {
             let savedLayups = safeParse('castleDarganLayups', {});
-            if (!savedLayups[currentHoleIndex]) savedLayups[currentHoleIndex] = [];
-            
+            let route = getValidLayups();
             let selectedIdx = parseInt(document.getElementById('planner-target-select').value) || 0;
             
-            if (savedLayups[currentHoleIndex].length === 0) {
-                savedLayups[currentHoleIndex].push({ lat: e.latlng.lat, lng: e.latlng.lng, club: 'Driver' });
+            if (route.length === 0) {
+                route.push({ lat: e.latlng.lat, lng: e.latlng.lng, club: 'Driver' });
                 selectedIdx = 0;
             } else {
-                savedLayups[currentHoleIndex][selectedIdx].lat = e.latlng.lat;
-                savedLayups[currentHoleIndex][selectedIdx].lng = e.latlng.lng;
+                if (!route[selectedIdx]) {
+                    route[selectedIdx] = { lat: e.latlng.lat, lng: e.latlng.lng, club: 'Driver' };
+                } else {
+                    route[selectedIdx].lat = e.latlng.lat;
+                    route[selectedIdx].lng = e.latlng.lng;
+                }
             }
             
+            savedLayups[currentHoleIndex] = route;
             localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
             updatePlannerDropdown();
             document.getElementById('planner-target-select').value = selectedIdx;
@@ -397,12 +424,12 @@ function saveNewTeeLocation(latlng) {
     if (isPlannerMode) processLocation(latlng.lat, latlng.lng);
 }
 
+
 // ==========================================
 // DYNAMIC MULTI-SHOT PLANNER (PLANNER MODE ONLY)
 // ==========================================
 function updatePlannerDropdown() {
-    let savedLayups = safeParse('castleDarganLayups', {});
-    let route = savedLayups[currentHoleIndex] || [];
+    let route = getValidLayups();
     let select = document.getElementById('planner-target-select');
     let currentVal = select.value;
     
@@ -418,25 +445,23 @@ function updatePlannerDropdown() {
 }
 
 document.getElementById('add-planned-target-btn').addEventListener('click', () => {
-    let savedLayups = safeParse('castleDarganLayups', {});
-    if (!savedLayups[currentHoleIndex]) savedLayups[currentHoleIndex] = [];
+    let route = getValidLayups();
+    if (route.length >= 5) return alert("Maximum 5 targets allowed.");
     
-    if (savedLayups[currentHoleIndex].length >= 5) return alert("Maximum 5 targets allowed.");
-    
-    let baseCoords = getActiveTeeCoords();
+    let baseCoords = getValidTeeCoords();
     let lastLat = baseCoords.lat, lastLng = baseCoords.lng;
     
-    if (savedLayups[currentHoleIndex].length > 0) {
-        let last = savedLayups[currentHoleIndex][savedLayups[currentHoleIndex].length - 1];
+    if (route.length > 0) {
+        let last = route[route.length - 1];
         lastLat = last.lat; lastLng = last.lng;
     }
     
-    // Offset slightly towards pin to prevent stacking
-    let tLat = courseData[currentHoleIndex].lat;
-    let tLng = courseData[currentHoleIndex].lng;
-    let newLat = lastLat + ((tLat - lastLat) * 0.3);
-    let newLng = lastLng + ((tLng - lastLng) * 0.3);
+    let pin = getValidPinCoords();
+    let newLat = lastLat + ((pin.lat - lastLat) * 0.3);
+    let newLng = lastLng + ((pin.lng - lastLng) * 0.3);
 
+    let savedLayups = safeParse('castleDarganLayups', {});
+    if (!savedLayups[currentHoleIndex]) savedLayups[currentHoleIndex] = route;
     savedLayups[currentHoleIndex].push({ lat: newLat, lng: newLng, club: '7 Iron' });
     localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
     
@@ -454,10 +479,8 @@ document.getElementById('clear-planned-route-btn').addEventListener('click', () 
     updatePlannerDropdown();
     renderPlannerUI();
     
-    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
-    const customPins = safeParse('castleDarganPins', {});
-    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
-    updateMapState(tLat, tLng);
+    let pin = getValidPinCoords();
+    updateMapState(pin.lat, pin.lng);
 });
 
 function renderPlannerUI() {
@@ -465,14 +488,10 @@ function renderPlannerUI() {
     if(plannerRouteGroup && map) map.removeLayer(plannerRouteGroup);
     plannerRouteGroup = L.layerGroup().addTo(map);
     
-    let savedLayups = safeParse('castleDarganLayups', {});
-    let route = savedLayups[currentHoleIndex] || [];
-    
-    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
-    const customPins = safeParse('castleDarganPins', {});
-    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+    let route = getValidLayups();
+    let pin = getValidPinCoords();
 
-    let baseTee = getActiveTeeCoords();
+    let baseTee = getValidTeeCoords();
     let startPoint = (currentLat && currentLng) ? {lat: currentLat, lng: currentLng} : baseTee;
 
     let points = [ startPoint ];
@@ -486,6 +505,7 @@ function renderPlannerUI() {
         
         m.on('dragend', function(e) {
             let currentLayups = safeParse('castleDarganLayups', {});
+            if (!currentLayups[currentHoleIndex]) currentLayups[currentHoleIndex] = getValidLayups();
             currentLayups[currentHoleIndex][i].lat = e.target.getLatLng().lat;
             currentLayups[currentHoleIndex][i].lng = e.target.getLatLng().lng;
             localStorage.setItem('castleDarganLayups', JSON.stringify(currentLayups));
@@ -493,7 +513,7 @@ function renderPlannerUI() {
         });
     });
     
-    points.push({lat: tLat, lng: tLng});
+    points.push({lat: pin.lat, lng: pin.lng});
     
     let html = '';
     const bag = getBag();
@@ -511,7 +531,7 @@ function renderPlannerUI() {
             club = rec ? rec.club : 'Driver';
         }
 
-        let title = (i === points.length - 1) ? "Approach to Pin" : `Shot ${i+1} to Target ${i+1}`;
+        let title = (i === points.length - 2) ? "Approach to Pin" : `Shot ${i+1} to Target ${i+1}`;
         let clubOptions = bag.map(c => `<option value="${c}" ${club === c ? 'selected' : ''}>${c}</option>`).join('');
         
         html += `
@@ -561,7 +581,9 @@ function renderPlannerUI() {
 
 window.updatePlannerRouteClub = function(index, club) {
     let savedLayups = safeParse('castleDarganLayups', {});
-    if (savedLayups[currentHoleIndex] && savedLayups[currentHoleIndex][index]) {
+    if (!savedLayups[currentHoleIndex]) savedLayups[currentHoleIndex] = getValidLayups();
+    
+    if (savedLayups[currentHoleIndex][index]) {
         savedLayups[currentHoleIndex][index].club = club;
         localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
         renderPlannerUI();
@@ -576,15 +598,11 @@ function drawPassivePlannedRoute() {
     if (passiveRouteGroup && map) map.removeLayer(passiveRouteGroup);
     passiveRouteGroup = L.layerGroup().addTo(map);
 
-    let savedLayups = safeParse('castleDarganLayups', {});
-    let route = savedLayups[currentHoleIndex];
-    if (!route || route.length === 0) return;
+    let route = getValidLayups();
+    if (route.length === 0) return;
 
-    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
-    const customPins = safeParse('castleDarganPins', {});
-    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
-
-    let baseTee = getActiveTeeCoords();
+    let pin = getValidPinCoords();
+    let baseTee = getValidTeeCoords();
 
     let pathPoints = [[baseTee.lat, baseTee.lng]];
     route.forEach((pt, i) => {
@@ -593,7 +611,7 @@ function drawPassivePlannedRoute() {
          .bindTooltip(`Planned Target ${i+1}`)
          .addTo(passiveRouteGroup);
     });
-    pathPoints.push([tLat, tLng]);
+    pathPoints.push([pin.lat, pin.lng]);
 
     L.polyline(pathPoints, {color: '#9b59b6', weight: 3, dashArray: '5, 5', opacity: 0.7}).addTo(passiveRouteGroup);
 }
@@ -616,11 +634,8 @@ function drawClubOverlay() {
     clubOverlayGroup = L.layerGroup().addTo(map); 
     const center = [currentLat, currentLng];
 
-    let tLat = courseData[currentHoleIndex].lat;
-    let tLng = courseData[currentHoleIndex].lng;
-    
-    const customPins = safeParse('castleDarganPins', {});
-    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+    let pin = getValidPinCoords();
+    let tLat = pin.lat, tLng = pin.lng;
     
     if (liveTargetMarker) {
         tLat = liveTargetMarker.getLatLng().lat;
@@ -659,13 +674,8 @@ document.getElementById('clear-live-target-btn').addEventListener('click', () =>
 
 document.getElementById('recenter-map-btn').addEventListener('click', () => {
     hasCenteredMapThisHole = false; 
-    let tLat = courseData[currentHoleIndex].lat;
-    let tLng = courseData[currentHoleIndex].lng;
-    
-    const customPins = safeParse('castleDarganPins', {}); 
-    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
-    
-    updateMapState(tLat, tLng);
+    let pin = getValidPinCoords();
+    updateMapState(pin.lat, pin.lng);
 });
 
 function updateMapState(tLat, tLng) {
@@ -673,7 +683,7 @@ function updateMapState(tLat, tLng) {
     if(currentLat) userMarker.setLatLng([currentLat, currentLng]); 
     if(tLat) pinMarker.setLatLng([tLat, tLng]);
     
-    let baseTee = getActiveTeeCoords();
+    let baseTee = getValidTeeCoords();
     let startPoint = (currentLat && currentLng) ? [currentLat, currentLng] : [baseTee.lat, baseTee.lng];
 
     if (!isPlannerMode && tLat) {
@@ -688,14 +698,13 @@ function updateMapState(tLat, tLng) {
 
 // MAIN LOCATION ENGINE
 function processLocation(lat, lng) {
-    if (!lat || !lng) return; // Strict Guard Clause
+    if (!lat || !lng) return; 
     
     currentLat = lat; currentLng = lng;
     if(liveWindSpeed === 0) fetchWeather(currentLat, currentLng);
     
-    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
-    const customPins = safeParse('castleDarganPins', {});
-    if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+    let pin = getValidPinCoords();
+    let tLat = pin.lat, tLng = pin.lng;
 
     let rawYardage = calculateDistance(currentLat, currentLng, tLat, tLng);
     const selectedTee = document.getElementById('tee-box-select').value;
@@ -846,10 +855,8 @@ document.getElementById('track-btn').addEventListener('click', () => {
         if (liveTargetMarker) { 
             shotTargetLat = liveTargetMarker.getLatLng().lat; shotTargetLng = liveTargetMarker.getLatLng().lng; 
         } else {
-            let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
-            const customPins = safeParse('castleDarganPins', {});
-            if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
-            shotTargetLat = tLat; shotTargetLng = tLng;
+            let pin = getValidPinCoords();
+            shotTargetLat = pin.lat; shotTargetLng = pin.lng;
         }
         document.getElementById('track-btn').innerText = "End Shot"; document.getElementById('track-btn').style.backgroundColor = "#f39c12"; 
     } else {
@@ -948,8 +955,7 @@ function updateHoleDisplay() {
     
     renderMultiplayerScorecard();
 
-    let tLat = courseData[currentHoleIndex].lat, tLng = courseData[currentHoleIndex].lng;
-    const customPins = safeParse('castleDarganPins', {}); if (customPins[currentHoleIndex]) { tLat = customPins[currentHoleIndex].lat; tLng = customPins[currentHoleIndex].lng; }
+    let pin = getValidPinCoords();
 
     if (isPlannerMode) {
         document.getElementById('planner-controls-box').style.display = 'block';
@@ -963,9 +969,7 @@ function updateHoleDisplay() {
         renderPlannerUI();
 
         if(userMarker) { userMarker.dragging.enable(); }
-        let teeCoords = getActiveTeeCoords();
-        
-        // Use tee coordinates for planner calculation fallback
+        let teeCoords = getValidTeeCoords();
         processLocation(teeCoords.lat, teeCoords.lng);
     } else {
         document.getElementById('planner-controls-box').style.display = 'none';
@@ -975,7 +979,7 @@ function updateHoleDisplay() {
         document.getElementById('live-target-box').style.display = 'none';
         
         if(userMarker) { userMarker.dragging.disable(); }
-        updateMapState(tLat, tLng);
+        updateMapState(pin.lat, pin.lng);
         
         drawPassivePlannedRoute();
         
