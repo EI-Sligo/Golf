@@ -736,7 +736,6 @@ async function renderPlannerUI() {
         let dist = calculateDistance(start.lat, start.lng, end.lat, end.lng);
         let bearing = calculateBearing(start.lat, start.lng, end.lat, end.lng);
         
-        // Planner Mode always uses API logic (Because user is not physically walking the hole)
         let startElev = await getElevation(start.lat, start.lng);
         let endElev = await getElevation(end.lat, end.lng);
         let elevDiffYards = (endElev - startElev) * 1.09361;
@@ -922,13 +921,10 @@ async function processLocation(lat, lng, alt) {
     let isUsingGPS = false;
     let savedPinElevs = safeParse('castleDarganPinElevations', {});
     
-    // Safely Calculate Main Shot Elevation Difference
     if (savedPinElevs[currentHoleIndex] !== undefined && currentAltitude !== null && !liveTargetMarker && !isPlannerMode) {
-        // Strict GPS vs GPS calculation for maximum relative accuracy
         elevDiffYards = (savedPinElevs[currentHoleIndex] - currentAltitude) * 1.09361;
         isUsingGPS = true;
     } else {
-        // Fallback to Open-Meteo API satellite radar
         let currentElevApi = await getElevation(currentLat, currentLng);
         let targetElevApi = await getElevation(tLat, tLng);
         elevDiffYards = (targetElevApi - currentElevApi) * 1.09361;
@@ -957,7 +953,6 @@ async function processLocation(lat, lng, alt) {
             let distToLayup = calculateDistance(currentLat, currentLng, lLat, lLng);
             let distToPin = calculateDistance(lLat, lLng, tLat, tLng);
             
-            // Temporary targets have no physical GPS data, so we MUST fall back to API vs API
             let currentElevApi = await getElevation(currentLat, currentLng);
             let layupElevApi = await getElevation(lLat, lLng);
             let layupElevDiff = (layupElevApi - currentElevApi) * 1.09361;
@@ -1000,7 +995,109 @@ function initGPS() {
 }
 
 // ==========================================
-// 5. CADDY & SHOT TRACKING
+// 5. FULL SCORECARD GENERATOR
+// ==========================================
+function generateScorecardHTML(scorecardData) {
+    let html = `<table style="width: 100%; border-collapse: collapse; text-align: center; font-size: 0.9rem;">
+        <thead>
+            <tr style="background-color: #34495e; color: white;">
+                <th style="padding: 8px; border: 1px solid #ddd;">Hole</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Par</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">SI</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Strokes</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Pts</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Putts</th>
+            </tr>
+        </thead>
+        <tbody>`;
+    
+    let outTot = {strokes: 0, pts: 0, putts: 0, par: 0};
+    let inTot = {strokes: 0, pts: 0, putts: 0, par: 0};
+    const selectedTee = document.getElementById('tee-box-select').value || 'white';
+
+    for (let i = 0; i < 18; i++) {
+        const hd = courseData[i];
+        const activePar = selectedTee === 'red' ? hd.redPar : hd.par;
+        const activeSi = selectedTee === 'red' ? hd.redSi : hd.si;
+        const holeScore = scorecardData[i] ? scorecardData[i]['A'] : null;
+        
+        let str = holeScore ? holeScore.strokes : '-';
+        let pts = holeScore ? holeScore.points : '-';
+        let putts = (holeScore && holeScore.putts !== undefined) ? holeScore.putts : '-';
+        let girHtml = (holeScore && holeScore.gir) ? ' <span style="color:#27ae60; font-size:0.7rem;">(GIR)</span>' : '';
+
+        if (holeScore) {
+            if (i < 9) { outTot.strokes += str; outTot.pts += pts; outTot.putts += putts; outTot.par += activePar; }
+            else { inTot.strokes += str; inTot.pts += pts; inTot.putts += putts; inTot.par += activePar; }
+        }
+
+        html += `<tr style="${i % 2 === 0 ? 'background-color: #f9f9f9;' : ''}">
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">${i + 1}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${activePar}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${activeSi}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">${str}${girHtml}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; color: #3498db;">${pts}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${putts}</td>
+        </tr>`;
+
+        if (i === 8) {
+            html += `<tr style="background-color: #ecf0f1; font-weight: bold;">
+                <td style="padding: 8px; border: 1px solid #ddd;">OUT</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${outTot.par || 36}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">-</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${outTot.strokes || '-'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; color: #3498db;">${outTot.pts || '-'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${outTot.putts || '-'}</td>
+            </tr>`;
+        }
+    }
+
+    let totalStrokes = outTot.strokes + inTot.strokes;
+    let totalPts = outTot.pts + inTot.pts;
+    let totalPutts = outTot.putts + inTot.putts;
+    let fullPar = courseData.reduce((acc, h) => acc + (selectedTee === 'red' ? h.redPar : h.par), 0);
+
+    html += `<tr style="background-color: #ecf0f1; font-weight: bold;">
+                <td style="padding: 8px; border: 1px solid #ddd;">IN</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${inTot.par || 36}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">-</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${inTot.strokes || '-'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; color: #3498db;">${inTot.pts || '-'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${inTot.putts || '-'}</td>
+            </tr>`;
+
+    html += `<tr style="background-color: #2c3e50; color: white; font-weight: bold;">
+        <td style="padding: 8px; border: 1px solid #ddd;">TOTAL</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${fullPar}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">-</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${totalStrokes || '-'}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; color: #3498db;">${totalPts || '-'}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${totalPutts || '-'}</td>
+    </tr>`;
+
+    html += `</tbody></table>`;
+    return html;
+}
+
+document.getElementById('view-live-scorecard-btn').addEventListener('click', () => {
+    const sc = safeParse('castleDarganScorecard', {});
+    document.getElementById('scorecard-table-container').innerHTML = generateScorecardHTML(sc);
+    document.getElementById('scorecard-modal').style.display = 'flex';
+});
+
+window.viewPastScorecard = function(idx) {
+    const history = safeParse('castleDarganHistory', []); 
+    const round = history[idx];
+    if (round && round.scorecard) {
+        document.getElementById('scorecard-table-container').innerHTML = generateScorecardHTML(round.scorecard);
+        document.getElementById('scorecard-modal').style.display = 'flex';
+    } else {
+        alert("No detailed scorecard data found for this older round.");
+    }
+};
+
+// ==========================================
+// 6. CADDY & SHOT TRACKING
 // ==========================================
 document.getElementById('audio-caddy-btn').addEventListener('click', () => {
     const dist = document.getElementById('distance-number').innerText; if(dist === "--") return;
@@ -1151,95 +1248,8 @@ function resetTrackerUI() {
 }
 
 // ==========================================
-// 7. PINS & MULTIPLAYER SCORECARD
+// 7. MULTIPLAYER SCORECARD
 // ==========================================
-document.getElementById('update-tee-btn').addEventListener('click', () => {
-    if (!currentLat) return alert("Waiting for GPS...");
-    const selectedTee = document.getElementById('tee-box-select').value; let savedTees = safeParse('castleDarganTees', {});
-    if(!savedTees[currentHoleIndex]) savedTees[currentHoleIndex] = {}; const oldTee = savedTees[currentHoleIndex][selectedTee];
-    savedTees[currentHoleIndex][selectedTee] = { lat: currentLat, lng: currentLng }; localStorage.setItem('castleDarganTees', JSON.stringify(savedTees));
-    hasCenteredMapThisHole = false; 
-    showToast("Tee Box Saved to Current Location!", () => {
-        if (oldTee) { savedTees[currentHoleIndex][selectedTee] = oldTee; } else { delete savedTees[currentHoleIndex][selectedTee]; }
-        localStorage.setItem('castleDarganTees', JSON.stringify(savedTees)); updateHoleDisplay(); 
-    }); updateHoleDisplay(); 
-});
-
-document.getElementById('update-pin-btn').addEventListener('click', () => {
-    if (!currentLat) return alert("Waiting for GPS...");
-    let customPins = safeParse('castleDarganPins', {}); customPins[currentHoleIndex] = { lat: currentLat, lng: currentLng }; localStorage.setItem('castleDarganPins', JSON.stringify(customPins));
-    hasCenteredMapThisHole = false; if(currentLat) updateMapState(currentLat, currentLng); 
-});
-
-document.getElementById('reset-pin-btn').addEventListener('click', () => {
-    let customPins = safeParse('castleDarganPins', {});
-    if (customPins[currentHoleIndex]) { delete customPins[currentHoleIndex]; localStorage.setItem('castleDarganPins', JSON.stringify(customPins)); }
-    
-    const selectedTee = document.getElementById('tee-box-select').value; let customTees = safeParse('castleDarganTees', {});
-    if (customTees[currentHoleIndex] && customTees[currentHoleIndex][selectedTee]) { delete customTees[currentHoleIndex][selectedTee]; localStorage.setItem('castleDarganTees', JSON.stringify(customTees)); }
-    
-    let savedLayups = safeParse('castleDarganLayups', {});
-    if(savedLayups[currentHoleIndex]) { delete savedLayups[currentHoleIndex]; localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups)); }
-
-    let savedElevs = safeParse('castleDarganPinElevations', {});
-    if(savedElevs[currentHoleIndex]) { delete savedElevs[currentHoleIndex]; localStorage.setItem('castleDarganPinElevations', JSON.stringify(savedElevs)); }
-
-    hasCenteredMapThisHole = false; updateHoleDisplay();
-});
-
-function updateHoleDisplay() {
-    if (!map) initMap(); 
-    
-    hasCenteredMapThisHole = false; hasReachedGreen = false;
-    const hd = courseData[currentHoleIndex]; const selectedTee = document.getElementById('tee-box-select').value;
-    const activePar = selectedTee === 'red' ? hd.redPar : hd.par; const activeSi = selectedTee === 'red' ? hd.redSi : hd.si; const officialYardage = hd.yds[selectedTee]; 
-
-    document.getElementById('current-hole').innerText = `Hole ${hd.hole}`;
-    document.getElementById('hole-par-display').innerText = `Par ${activePar} | SI ${activeSi} | ${officialYardage}y`;
-    document.getElementById('scorecard-hole-num').innerText = hd.hole;
-    
-    renderMultiplayerScorecard();
-
-    let pin = getValidPinCoords();
-
-    if (isPlannerMode) {
-        document.getElementById('planner-controls-box').style.display = 'block';
-        document.getElementById('live-target-box').style.display = 'none';
-        document.getElementById('club-overlay-select').style.display = 'none';
-        if(liveTargetMarker && map) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
-        
-        renderPlannerUI();
-
-        if(userMarker) { userMarker.dragging.enable(); }
-        let teeCoords = getValidTeeCoords();
-        processLocation(teeCoords.lat, teeCoords.lng, null);
-    } else {
-        document.getElementById('planner-controls-box').style.display = 'none';
-        document.getElementById('club-overlay-select').style.display = 'block';
-        if(plannerRouteGroup && map) map.removeLayer(plannerRouteGroup);
-        if(liveTargetMarker && map) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
-        document.getElementById('live-target-box').style.display = 'none';
-        
-        if(userMarker) { userMarker.dragging.disable(); }
-        updateMapState(pin.lat, pin.lng);
-        
-        drawPassivePlannedRoute();
-        
-        if (currentLat && currentLng) {
-            processLocation(currentLat, currentLng, currentAltitude);
-        }
-    }
-}
-
-document.getElementById('next-hole').addEventListener('click', () => { if (currentHoleIndex < courseData.length - 1) { currentHoleIndex++; updateHoleDisplay(); }});
-document.getElementById('prev-hole').addEventListener('click', () => { if (currentHoleIndex > 0) { currentHoleIndex--; updateHoleDisplay(); }});
-
-function calculateStableford(gross, par, si, playerHcp) {
-    if (!gross || gross <= 0) return 0;
-    let strokesRec = Math.floor(playerHcp / 18); if ((playerHcp % 18) >= si) strokesRec += 1;
-    return Math.max(0, 2 - ((gross - strokesRec) - par));
-}
-
 function renderMultiplayerScorecard() {
     const wrap = document.getElementById('multiplayer-scorecard-wrapper');
     const sc = safeParse('castleDarganScorecard', {}); const holeData = sc[currentHoleIndex] || {};
@@ -1262,9 +1272,9 @@ function renderMultiplayerScorecard() {
              let putts = holeData[p.id]?.putts || ''; let gir = holeData[p.id]?.gir ? 'checked' : '';
              html += `
              <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:2px solid #ccc; margin-bottom:10px; background:#f9f9f9; gap:8px;">
-                <div style="flex:2; font-size:0.85rem; color:#7f8c8d; text-align:right; min-width:0;">My Putts/GIR:</div>
+                <div style="flex:2; font-size:0.85rem; color:#7f8c8d; text-align:right; min-width:0;">My Putts/GIR (Auto):</div>
                 <div style="flex:1; min-width:0;"><input type="number" id="putts-A" value="${putts}" placeholder="Putts" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; text-align:center; box-sizing:border-box;" oninput="updatePlayerScore('A', ${p.hcp}, ${activePar}, ${activeSi})"></div>
-                <div style="flex:1; text-align:center; min-width:0;"><input type="checkbox" id="gir-A" ${gir} style="width:25px; height:25px;"></div>
+                <div style="flex:1; text-align:center; min-width:0;"><input type="checkbox" id="gir-A" ${gir} disabled style="width:25px; height:25px;"></div>
              </div>`;
         }
     }); wrap.innerHTML = html;
@@ -1273,7 +1283,14 @@ function renderMultiplayerScorecard() {
 window.updatePlayerScore = function(playerId, hcp, par, si) {
     const strokes = parseInt(document.getElementById(`strokes-${playerId}`).value); const ptsEl = document.getElementById(`pts-${playerId}`);
     if (strokes) { ptsEl.innerText = calculateStableford(strokes, par, si, hcp) + " Pts"; } else { ptsEl.innerText = "0 Pts"; }
-    if (playerId === 'A') { const putts = parseInt(document.getElementById('putts-A').value); if (strokes && putts >= 0) document.getElementById('gir-A').checked = ((strokes - putts) <= (par - 2)); }
+    
+    // Strict automatic GIR calculation: Strokes minus putts must equal Par minus 2
+    if (playerId === 'A') { 
+        const putts = parseInt(document.getElementById('putts-A').value); 
+        if (strokes && putts >= 0) {
+            document.getElementById('gir-A').checked = ((strokes - putts) <= (par - 2)); 
+        }
+    }
 }
 
 document.getElementById('save-score-btn').addEventListener('click', () => {
@@ -1371,7 +1388,14 @@ document.getElementById('end-round-btn').addEventListener('click', () => {
         for (let k in scorecard) { if(scorecard[k]['A']) { totPts += scorecard[k]['A'].points; totStrokes += scorecard[k]['A'].strokes; } }
         
         let history = safeParse('castleDarganHistory', []);
-        history.push({ date: new Date().toLocaleDateString(), holesPlayed: Object.keys(scorecard).length, points: totPts, strokes: totStrokes, shots: safeParse('castleDarganActiveRoundShots', []) });
+        history.push({ 
+            date: new Date().toLocaleDateString(), 
+            holesPlayed: Object.keys(scorecard).length, 
+            points: totPts, 
+            strokes: totStrokes, 
+            shots: safeParse('castleDarganActiveRoundShots', []),
+            scorecard: scorecard
+        });
         localStorage.setItem('castleDarganHistory', JSON.stringify(history));
         
         localStorage.removeItem('castleDarganScorecard'); localStorage.removeItem('castleDarganActiveRoundShots'); 
@@ -1428,6 +1452,7 @@ function renderHistoryTab() {
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <div class="history-points">${r.points} Pts</div>
                     ${hasTracers ? `<button onclick="viewShotTracers(${originalIdx})" style="background: none; border: none; color: #3498db; cursor: pointer; font-size: 1.5rem;" title="View Tracers">📍</button>` : ''}
+                    ${r.scorecard ? `<button onclick="viewPastScorecard(${originalIdx})" style="background: none; border: none; color: #27ae60; cursor: pointer; font-size: 1.5rem;" title="View Scorecard">📋</button>` : ''}
                     <button onclick="deleteRound(${originalIdx})" style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 1.2rem;">🗑️</button>
                 </div>
             </div>`;

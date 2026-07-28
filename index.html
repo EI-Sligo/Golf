@@ -158,8 +158,8 @@
                 
                 <div class="pin-controls" style="margin-top: 15px;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                        <button id="update-tee-btn" class="action-btn" style="background-color: #27ae60; color: white;">Set Tee Here</button>
-                        <button id="update-pin-btn" class="action-btn blue-btn">Set Pin Here</button>
+                        <button id="update-tee-btn" class="action-btn" style="background-color: #27ae60; color: white;">Set Tee</button>
+                        <button id="update-pin-btn" class="action-btn blue-btn">Set Pin</button>
                     </div>
                     <button id="save-pin-elev-btn" class="action-btn" style="background-color: #8e44ad; color: white; width: 100%; margin-bottom: 10px;">Save Pin Elevation (GPS)</button>
                     <button id="reset-pin-btn" class="action-btn gray-btn" style="width: 100%;">Reset Hole to Default</button>
@@ -196,7 +196,10 @@
             <section class="scorecard card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <h3 style="margin:0; border:none; padding:0;">Score - Hole <span id="scorecard-hole-num">1</span></h3>
-                    <button id="save-score-btn" class="action-btn blue-btn" style="width:auto; padding:8px 20px;">Save</button>
+                    <div>
+                        <button id="view-live-scorecard-btn" class="action-btn gray-btn" style="width:auto; padding:8px 15px; margin-right: 5px;">Full Card</button>
+                        <button id="save-score-btn" class="action-btn blue-btn" style="width:auto; padding:8px 20px;">Save</button>
+                    </div>
                 </div>
                 
                 <div id="multiplayer-scorecard-wrapper" style="border-top: 2px solid #f0f0f0;">
@@ -253,6 +256,19 @@
                 <button onclick="document.getElementById('tracer-modal').style.display='none';" style="background:none; border:none; color:#fff; font-size:2rem; cursor:pointer; line-height: 0.8;">&times;</button>
             </div>
             <div id="history-map" style="flex:1; width:100%;"></div>
+        </div>
+    </div>
+
+    <!-- FULL SCORECARD MODAL -->
+    <div id="scorecard-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:10000; padding:20px; box-sizing:border-box;">
+        <div style="background:#fff; width:100%; height:100%; border-radius:15px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div style="padding:15px 20px; display:flex; justify-content:space-between; align-items:center; background:#2c3e50; color:#fff;">
+                <h3 style="margin:0; font-size: 1.2rem;">Full Scorecard</h3>
+                <button onclick="document.getElementById('scorecard-modal').style.display='none';" style="background:none; border:none; color:#fff; font-size:2rem; cursor:pointer; line-height: 0.8;">&times;</button>
+            </div>
+            <div id="scorecard-table-container" style="flex:1; width:100%; overflow-y:auto; padding: 10px;">
+                <!-- JS Injected Table -->
+            </div>
         </div>
     </div>
 
