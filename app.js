@@ -254,7 +254,7 @@ function sortBag(bagArray) {
 }
 
 // ==========================================
-// DATA SANITIZERS (Fixes Corrupted LocalStorage)
+// DATA SANITIZERS
 // ==========================================
 function getValidTeeCoords() {
     const hd = courseData[currentHoleIndex];
@@ -284,7 +284,6 @@ function getValidLayups() {
     let route = savedLayups[currentHoleIndex] || [];
     return route.filter(pt => pt && typeof pt.lat === 'number' && typeof pt.lng === 'number' && !isNaN(pt.lat) && !isNaN(pt.lng));
 }
-
 
 // ==========================================
 // 2. MULTIPLAYER START SCREEN
@@ -1028,66 +1027,6 @@ async function processLocation(lat, lng, alt) {
 }
 
 // ==========================================
-// FIX: REMOVED EVENT LISTENER NESTING SCOPE BUG
-// ==========================================
-function updateHoleDisplay() {
-    if (!map) initMap(); 
-    
-    hasCenteredMapThisHole = false; hasReachedGreen = false;
-    const hd = courseData[currentHoleIndex]; const selectedTee = document.getElementById('tee-box-select').value;
-    const activePar = selectedTee === 'red' ? hd.redPar : hd.par; const activeSi = selectedTee === 'red' ? hd.redSi : hd.si; const officialYardage = hd.yds[selectedTee]; 
-
-    document.getElementById('current-hole').innerText = `Hole ${hd.hole}`;
-    document.getElementById('hole-par-display').innerText = `Par ${activePar} | SI ${activeSi} | ${officialYardage}y`;
-    document.getElementById('scorecard-hole-num').innerText = hd.hole;
-    
-    renderMultiplayerScorecard();
-
-    let pin = getValidPinCoords();
-
-    if (isPlannerMode) {
-        document.getElementById('planner-controls-box').style.display = 'block';
-        document.getElementById('live-target-box').style.display = 'none';
-        document.getElementById('club-overlay-select').style.display = 'none';
-        if(liveTargetMarker && map) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
-        
-        renderPlannerUI();
-
-        if(userMarker) { userMarker.dragging.enable(); }
-        let teeCoords = getValidTeeCoords();
-        processLocation(teeCoords.lat, teeCoords.lng, null);
-    } else {
-        document.getElementById('planner-controls-box').style.display = 'none';
-        document.getElementById('club-overlay-select').style.display = 'block';
-        if(plannerRouteGroup && map) map.removeLayer(plannerRouteGroup);
-        if(liveTargetMarker && map) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
-        document.getElementById('live-target-box').style.display = 'none';
-        
-        if(userMarker) { userMarker.dragging.disable(); }
-        updateMapState(pin.lat, pin.lng);
-        
-        drawPassivePlannedRoute();
-        
-        if (currentLat && currentLng) {
-            processLocation(currentLat, currentLng, currentAltitude);
-        }
-    }
-}
-
-// EVENT LISTENERS MOVED OUT TO ROOT SCOPE
-document.getElementById('next-hole').addEventListener('click', () => { if (currentHoleIndex < courseData.length - 1) { currentHoleIndex++; updateHoleDisplay(); }});
-document.getElementById('prev-hole').addEventListener('click', () => { if (currentHoleIndex > 0) { currentHoleIndex--; updateHoleDisplay(); }});
-
-function initGPS() {
-    if ("geolocation" in navigator) {
-        gpsWatchId = navigator.geolocation.watchPosition(
-            (pos) => { if(!isPlannerMode) processLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.altitude); },
-            (err) => console.log("GPS Err"), { enableHighAccuracy: true, maximumAge: 0 } 
-        );
-    }
-}
-
-// ==========================================
 // 5. FULL SCORECARD GENERATOR
 // ==========================================
 function generateScorecardHTML(scorecardData) {
@@ -1108,6 +1047,8 @@ function generateScorecardHTML(scorecardData) {
     let inTot = {strokes: 0, pts: 0, putts: 0, par: 0};
     const selectedTee = document.getElementById('tee-box-select').value || 'white';
 
+    let playedPar = 0;
+
     for (let i = 0; i < 18; i++) {
         const hd = courseData[i];
         const activePar = selectedTee === 'red' ? hd.redPar : hd.par;
@@ -1120,6 +1061,7 @@ function generateScorecardHTML(scorecardData) {
         let girHtml = (holeScore && holeScore.gir) ? ' <span style="color:#27ae60; font-size:0.7rem;">(GIR)</span>' : '';
 
         if (holeScore) {
+            playedPar += activePar;
             if (i < 9) { outTot.strokes += str; outTot.pts += pts; outTot.putts += putts; outTot.par += activePar; }
             else { inTot.strokes += str; inTot.pts += pts; inTot.putts += putts; inTot.par += activePar; }
         }
@@ -1150,6 +1092,12 @@ function generateScorecardHTML(scorecardData) {
     let totalPutts = outTot.putts + inTot.putts;
     let fullPar = courseData.reduce((acc, h) => acc + (selectedTee === 'red' ? h.redPar : h.par), 0);
 
+    let toParText = "";
+    if (totalStrokes > 0 && playedPar > 0) {
+        let diff = totalStrokes - playedPar;
+        toParText = diff > 0 ? `(+${diff})` : (diff === 0 ? "(E)" : `(${diff})`);
+    }
+
     html += `<tr style="background-color: #ecf0f1; font-weight: bold;">
                 <td style="padding: 8px; border: 1px solid #ddd;">IN</td>
                 <td style="padding: 8px; border: 1px solid #ddd;">${inTot.par || 36}</td>
@@ -1163,7 +1111,7 @@ function generateScorecardHTML(scorecardData) {
         <td style="padding: 8px; border: 1px solid #ddd;">TOTAL</td>
         <td style="padding: 8px; border: 1px solid #ddd;">${fullPar}</td>
         <td style="padding: 8px; border: 1px solid #ddd;">-</td>
-        <td style="padding: 8px; border: 1px solid #ddd;">${totalStrokes || '-'}</td>
+        <td style="padding: 8px; border: 1px solid #ddd;">${totalStrokes || '-'} <span style="color:#f1c40f; font-size:0.8rem;">${toParText}</span></td>
         <td style="padding: 8px; border: 1px solid #ddd; color: #3498db;">${totalPts || '-'}</td>
         <td style="padding: 8px; border: 1px solid #ddd;">${totalPutts || '-'}</td>
     </tr>`;
@@ -1343,6 +1291,12 @@ function resetTrackerUI() {
 // ==========================================
 // 7. MULTIPLAYER SCORECARD
 // ==========================================
+function calculateStableford(gross, par, si, playerHcp) {
+    if (!gross || gross <= 0) return 0;
+    let strokesRec = Math.floor(playerHcp / 18); if ((playerHcp % 18) >= si) strokesRec += 1;
+    return Math.max(0, 2 - ((gross - strokesRec) - par));
+}
+
 function renderMultiplayerScorecard() {
     const wrap = document.getElementById('multiplayer-scorecard-wrapper');
     const sc = safeParse('castleDarganScorecard', {}); const holeData = sc[currentHoleIndex] || {};
@@ -1408,6 +1362,57 @@ document.getElementById('save-score-btn').addEventListener('click', () => {
         updateHoleDisplay(); updateAnalytics();
     });
 });
+
+// ==========================================
+// FIX: RESTORED MISSING FUNCTION SCOPE
+// ==========================================
+function updateHoleDisplay() {
+    if (!map) initMap(); 
+    
+    hasCenteredMapThisHole = false; hasReachedGreen = false;
+    const hd = courseData[currentHoleIndex]; const selectedTee = document.getElementById('tee-box-select').value;
+    const activePar = selectedTee === 'red' ? hd.redPar : hd.par; const activeSi = selectedTee === 'red' ? hd.redSi : hd.si; const officialYardage = hd.yds[selectedTee]; 
+
+    document.getElementById('current-hole').innerText = `Hole ${hd.hole}`;
+    document.getElementById('hole-par-display').innerText = `Par ${activePar} | SI ${activeSi} | ${officialYardage}y`;
+    document.getElementById('scorecard-hole-num').innerText = hd.hole;
+    
+    renderMultiplayerScorecard();
+
+    let pin = getValidPinCoords();
+
+    if (isPlannerMode) {
+        document.getElementById('planner-controls-box').style.display = 'block';
+        document.getElementById('live-target-box').style.display = 'none';
+        document.getElementById('club-overlay-select').style.display = 'none';
+        if(liveTargetMarker && map) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
+        
+        renderPlannerUI();
+
+        if(userMarker) { userMarker.dragging.enable(); }
+        let teeCoords = getValidTeeCoords();
+        processLocation(teeCoords.lat, teeCoords.lng, null);
+    } else {
+        document.getElementById('planner-controls-box').style.display = 'none';
+        document.getElementById('club-overlay-select').style.display = 'block';
+        if(plannerRouteGroup && map) map.removeLayer(plannerRouteGroup);
+        if(liveTargetMarker && map) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
+        document.getElementById('live-target-box').style.display = 'none';
+        
+        if(userMarker) { userMarker.dragging.disable(); }
+        updateMapState(pin.lat, pin.lng);
+        
+        drawPassivePlannedRoute();
+        
+        if (currentLat && currentLng) {
+            processLocation(currentLat, currentLng, currentAltitude);
+        }
+    }
+}
+
+document.getElementById('next-hole').addEventListener('click', () => { if (currentHoleIndex < courseData.length - 1) { currentHoleIndex++; updateHoleDisplay(); }});
+document.getElementById('prev-hole').addEventListener('click', () => { if (currentHoleIndex > 0) { currentHoleIndex--; updateHoleDisplay(); }});
+
 
 // ==========================================
 // 8. ANALYTICS & HISTORY
