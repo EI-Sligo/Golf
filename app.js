@@ -534,6 +534,19 @@ function getExpectedStrokes(distance, lie, isTee, par) {
     return expected;
 }
 
+// NEW: Advanced Physics Elevation Adjustment
+function calculateElevationAdjustment(elevDiffYards) {
+    if (elevDiffYards === 0) return 0;
+    // beta = 42 degrees (Average golf ball descent angle)
+    const betaRad = 42 * (Math.PI / 180);
+    // k = aerodynamic drag constant for a golf ball
+    const k = 0.003; 
+    
+    // Delta Yards = y / tan(beta) + k * y^2
+    const adjustment = (elevDiffYards / Math.tan(betaRad)) + (k * Math.pow(elevDiffYards, 2));
+    return adjustment;
+}
+
 async function getElevation(lat, lng) {
     if (!lat || !lng) return 0;
     
@@ -728,7 +741,8 @@ async function renderPlannerUI() {
         let endElev = await getElevation(end.lat, end.lng);
         let elevDiffYards = (endElev - startElev) * 1.09361;
         
-        let playsLike = Math.max(0, Math.round(dist + (Math.cos(toRadians(liveWindDir - bearing)) * liveWindSpeed) + elevDiffYards));
+        let elevAdjustment = calculateElevationAdjustment(elevDiffYards);
+        let playsLike = Math.max(0, Math.round(dist + (Math.cos(toRadians(liveWindDir - bearing)) * liveWindSpeed) + elevAdjustment));
 
         let club = clubs[i];
         if (!club) { 
@@ -925,7 +939,9 @@ async function processLocation(lat, lng, alt) {
 
     const holeBearing = calculateBearing(currentLat, currentLng, tLat, tLng);
     const effectiveWind = Math.cos(toRadians(liveWindDir - holeBearing)) * liveWindSpeed; 
-    currentPlaysLike = Math.max(0, Math.round(rawYardage + effectiveWind + elevDiffYards)); 
+    
+    let elevAdjustment = calculateElevationAdjustment(elevDiffYards);
+    currentPlaysLike = Math.max(0, Math.round(rawYardage + effectiveWind + elevAdjustment)); 
     document.getElementById('plays-like-number').innerText = currentPlaysLike > 0 ? currentPlaysLike : "--";
 
     if(tLat) updateMapState(tLat, tLng); 
@@ -950,10 +966,10 @@ async function processLocation(lat, lng, alt) {
             let pinElevDiff = (targetElevApi - layupElevApi) * 1.09361;
             
             let layupBearing = calculateBearing(currentLat, currentLng, lLat, lLng);
-            let layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed) + layupElevDiff));
+            let layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed) + calculateElevationAdjustment(layupElevDiff)));
             
             let pinBearing = calculateBearing(lLat, lLng, tLat, tLng);
-            let pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed) + pinElevDiff));
+            let pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed) + calculateElevationAdjustment(pinElevDiff)));
 
             let layupRec = getClubRecommendationData(layupPlaysLike); 
             let pinRec = getClubRecommendationData(pinPlaysLike);
