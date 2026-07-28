@@ -1,7 +1,7 @@
 // ==========================================
 // 1. GLOBAL VARIABLES & SELF-HEALING MEMORY
 // ==========================================
-let currentLat = null, currentLng = null, currentHoleIndex = 0; 
+let currentLat = null, currentLng = null, currentAltitude = null, currentHoleIndex = 0; 
 let isTrackingShot = false, shotStartLat = null, shotStartLng = null, shotStartDistance = 0, pendingDistance = 0;
 let shotTargetLat = null, shotTargetLng = null; 
 
@@ -445,7 +445,8 @@ document.getElementById('export-btn').addEventListener('click', () => {
         shots: safeParse('castleDarganShots', []), scorecard: safeParse('castleDarganScorecard', {}), bag: safeParse('castleDarganBag', defaultBag), 
         history: safeParse('castleDarganHistory', []), pins: safeParse('castleDarganPins', {}), tees: safeParse('castleDarganTees', {}), layups: safeParse('castleDarganLayups', {}),
         phcap: localStorage.getItem('castleDarganPlayingHandicap') || 18,
-        plannerClubs: safeParse('castleDarganPlannerClubs', {})
+        plannerClubs: safeParse('castleDarganPlannerClubs', {}),
+        pinElevs: safeParse('castleDarganPinElevations', {})
     };
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(backupData)], {type: "application/json"})); a.download = `CDCaddy_Backup.json`; a.click();
 });
@@ -464,6 +465,7 @@ document.getElementById('import-file').addEventListener('change', (e) => {
             if (data.layups) localStorage.setItem('castleDarganLayups', JSON.stringify(data.layups));
             if (data.phcap) localStorage.setItem('castleDarganPlayingHandicap', data.phcap);
             if (data.plannerClubs) localStorage.setItem('castleDarganPlannerClubs', JSON.stringify(data.plannerClubs));
+            if (data.pinElevs) localStorage.setItem('castleDarganPinElevations', JSON.stringify(data.pinElevs));
             alert("Data imported! App will reload."); location.reload();
         } catch (err) { alert("Error parsing file."); }
     }; reader.readAsText(file);
@@ -532,18 +534,8 @@ function getExpectedStrokes(distance, lie, isTee, par) {
     return expected;
 }
 
-// HARDCODED ELEVATION FIXES (to bypass 90m SRTM radar limits)
-const manualElevations = [
-    { lat: 54.200508175763545, lng: -8.421868085861208, elev: 85 }, // Hole 3 Tee
-    { lat: 54.19965465300563, lng: -8.421208262443544, elev: 65 }   // Hole 3 Pin
-];
-
 async function getElevation(lat, lng) {
     if (!lat || !lng) return 0;
-    
-    for (let m of manualElevations) {
-        if (Math.abs(m.lat - lat) < 0.0001 && Math.abs(m.lng - lng) < 0.0001) return m.elev;
-    }
     
     const cacheKey = `elev_${lat.toFixed(4)}_${lng.toFixed(4)}`;
     let cached = localStorage.getItem(cacheKey);
@@ -605,11 +597,11 @@ function initMap() {
             if (!currentLat) return;
             if (!liveTargetMarker) {
                 liveTargetMarker = L.marker(e.latlng, {icon: yellowLayupIcon, draggable: true}).addTo(map);
-                liveTargetMarker.on('dragend', function() { processLocation(currentLat, currentLng); });
+                liveTargetMarker.on('dragend', function() { processLocation(currentLat, currentLng, currentAltitude); });
             } else {
                 liveTargetMarker.setLatLng(e.latlng);
             }
-            processLocation(currentLat, currentLng);
+            processLocation(currentLat, currentLng, currentAltitude);
         }
     });
 }
@@ -625,8 +617,24 @@ function saveNewTeeLocation(latlng) {
         if (oldTee) savedTees[currentHoleIndex][selectedTee] = oldTee; else delete savedTees[currentHoleIndex][selectedTee];
         localStorage.setItem('castleDarganTees', JSON.stringify(savedTees)); updateHoleDisplay(); 
     });
-    if (isPlannerMode) processLocation(latlng.lat, latlng.lng);
+    if (isPlannerMode) processLocation(latlng.lat, latlng.lng, null);
 }
+
+// NEW: Save Pin GPS Elevation
+document.getElementById('save-pin-elev-btn').addEventListener('click', () => {
+    if (currentAltitude === null) return alert("Waiting for GPS altitude data from your device...");
+    
+    let savedElevs = safeParse('castleDarganPinElevations', {});
+    savedElevs[currentHoleIndex] = currentAltitude;
+    localStorage.setItem('castleDarganPinElevations', JSON.stringify(savedElevs));
+    
+    showToast("Pin Elevation Saved!", () => {
+        delete savedElevs[currentHoleIndex];
+        localStorage.setItem('castleDarganPinElevations', JSON.stringify(savedElevs));
+        if (currentLat) processLocation(currentLat, currentLng, currentAltitude);
+    });
+    if (currentLat) processLocation(currentLat, currentLng, currentAltitude);
+});
 
 
 // ==========================================
@@ -715,6 +723,7 @@ async function renderPlannerUI() {
         let dist = calculateDistance(start.lat, start.lng, end.lat, end.lng);
         let bearing = calculateBearing(start.lat, start.lng, end.lat, end.lng);
         
+        // Planner Mode always uses API logic (Because user is not physically walking the hole)
         let startElev = await getElevation(start.lat, start.lng);
         let endElev = await getElevation(end.lat, end.lng);
         let elevDiffYards = (endElev - startElev) * 1.09361;
@@ -871,10 +880,12 @@ function updateMapState(tLat, tLng) {
 }
 
 // MAIN LOCATION ENGINE
-async function processLocation(lat, lng) {
+async function processLocation(lat, lng, alt) {
     if (!lat || !lng) return; 
     
     currentLat = lat; currentLng = lng;
+    if (alt !== undefined && alt !== null && !isNaN(alt)) currentAltitude = alt;
+    
     if(liveWindSpeed === 0) fetchWeather(currentLat, currentLng);
     
     let pin = getValidPinCoords();
@@ -893,11 +904,24 @@ async function processLocation(lat, lng) {
         }
     }
 
-    let currentElev = await getElevation(currentLat, currentLng);
-    let targetElev = await getElevation(tLat, tLng);
-    let elevDiffYards = (targetElev - currentElev) * 1.09361;
+    let elevDiffYards = 0;
+    let isUsingGPS = false;
+    let savedPinElevs = safeParse('castleDarganPinElevations', {});
+    
+    // Safely Calculate Main Shot Elevation Difference
+    if (savedPinElevs[currentHoleIndex] !== undefined && currentAltitude !== null && !liveTargetMarker && !isPlannerMode) {
+        // Strict GPS vs GPS calculation for maximum relative accuracy
+        elevDiffYards = (savedPinElevs[currentHoleIndex] - currentAltitude) * 1.09361;
+        isUsingGPS = true;
+    } else {
+        // Fallback to Open-Meteo API satellite radar
+        let currentElevApi = await getElevation(currentLat, currentLng);
+        let targetElevApi = await getElevation(tLat, tLng);
+        elevDiffYards = (targetElevApi - currentElevApi) * 1.09361;
+    }
+    
     let elevText = elevDiffYards > 0 ? `+${Math.round(elevDiffYards)}` : Math.round(elevDiffYards);
-    document.getElementById('elev-display').innerText = `${elevText}y`;
+    document.getElementById('elev-display').innerText = `${elevText}y ${isUsingGPS ? '(GPS)' : ''}`;
 
     const holeBearing = calculateBearing(currentLat, currentLng, tLat, tLng);
     const effectiveWind = Math.cos(toRadians(liveWindDir - holeBearing)) * liveWindSpeed; 
@@ -917,9 +941,13 @@ async function processLocation(lat, lng) {
             let distToLayup = calculateDistance(currentLat, currentLng, lLat, lLng);
             let distToPin = calculateDistance(lLat, lLng, tLat, tLng);
             
-            let layupElev = await getElevation(lLat, lLng);
-            let layupElevDiff = (layupElev - currentElev) * 1.09361;
-            let pinElevDiff = (targetElev - layupElev) * 1.09361;
+            // Temporary targets have no physical GPS data, so we MUST fall back to API vs API
+            let currentElevApi = await getElevation(currentLat, currentLng);
+            let layupElevApi = await getElevation(lLat, lLng);
+            let layupElevDiff = (layupElevApi - currentElevApi) * 1.09361;
+            
+            let targetElevApi = await getElevation(tLat, tLng);
+            let pinElevDiff = (targetElevApi - layupElevApi) * 1.09361;
             
             let layupBearing = calculateBearing(currentLat, currentLng, lLat, lLng);
             let layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed) + layupElevDiff));
@@ -949,7 +977,7 @@ async function processLocation(lat, lng) {
 function initGPS() {
     if ("geolocation" in navigator) {
         gpsWatchId = navigator.geolocation.watchPosition(
-            (pos) => { if(!isPlannerMode) processLocation(pos.coords.latitude, pos.coords.longitude); },
+            (pos) => { if(!isPlannerMode) processLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.altitude); },
             (err) => console.log("GPS Err"), { enableHighAccuracy: true, maximumAge: 0 } 
         );
     }
@@ -1137,6 +1165,9 @@ document.getElementById('reset-pin-btn').addEventListener('click', () => {
     let savedLayups = safeParse('castleDarganLayups', {});
     if(savedLayups[currentHoleIndex]) { delete savedLayups[currentHoleIndex]; localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups)); }
 
+    let savedElevs = safeParse('castleDarganPinElevations', {});
+    if(savedElevs[currentHoleIndex]) { delete savedElevs[currentHoleIndex]; localStorage.setItem('castleDarganPinElevations', JSON.stringify(savedElevs)); }
+
     hasCenteredMapThisHole = false; updateHoleDisplay();
 });
 
@@ -1165,7 +1196,7 @@ function updateHoleDisplay() {
 
         if(userMarker) { userMarker.dragging.enable(); }
         let teeCoords = getValidTeeCoords();
-        processLocation(teeCoords.lat, teeCoords.lng);
+        processLocation(teeCoords.lat, teeCoords.lng, null);
     } else {
         document.getElementById('planner-controls-box').style.display = 'none';
         document.getElementById('club-overlay-select').style.display = 'block';
@@ -1179,7 +1210,7 @@ function updateHoleDisplay() {
         drawPassivePlannedRoute();
         
         if (currentLat && currentLng) {
-            processLocation(currentLat, currentLng);
+            processLocation(currentLat, currentLng, currentAltitude);
         }
     }
 }
