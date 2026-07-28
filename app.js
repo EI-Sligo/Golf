@@ -2,11 +2,12 @@
 // 1. GLOBAL VARIABLES & SELF-HEALING MEMORY
 // ==========================================
 let currentLat = null, currentLng = null, currentHoleIndex = 0; 
-let isTrackingShot = false, shotStartLat = null, shotStartLng = null, pendingDistance = 0;
+let isTrackingShot = false, shotStartLat = null, shotStartLng = null, shotStartDistance = 0, pendingDistance = 0;
 let shotTargetLat = null, shotTargetLng = null; 
 
 let map, userMarker, pinMarker, pathLine;
 
+// Separation of Active and Planned Map Elements
 let liveTargetMarker = null; 
 let passiveRouteGroup = null; 
 let plannerRouteGroup = null; 
@@ -422,7 +423,7 @@ function renderShotsList() {
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 10px 0;">
                 <div>
                     <strong style="color: #2c3e50;">${s.club}</strong> - <span style="color: #27ae60; font-weight: bold;">${s.distance} Yds</span><br>
-                    <span style="font-size: 0.8rem; color: #7f8c8d;">${s.accuracy || 'Fairway'} | Hole ${s.hole || '?'}</span>
+                    <span style="font-size: 0.8rem; color: #7f8c8d;">${s.accuracy || 'Fairway'} | SG: <span style="color: ${s.sg >= 0 ? '#27ae60' : '#e74c3c'}">${s.sg > 0 ? '+' : ''}${s.sg || '0.00'}</span></span>
                 </div>
                 <button onclick="deleteShot(${originalIdx})" style="background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 1.2rem;">🗑️</button>
             </div>`;
@@ -492,7 +493,6 @@ function getDestination(lat, lng, distMeters, bearingDeg) {
     return [toDegrees(lat2), toDegrees(lon2)];
 }
 
-// NEW: Elliptical Dispersion Ring Generator
 function getEllipsePoints(centerLat, centerLng, distAvg, distMin, distMax, spreadAngle, bearing) {
     let a = ((distMax - distMin) / 2) * 0.9144; 
     let b = (distAvg * 0.9144) * Math.tan(toRadians(spreadAngle)); 
@@ -515,9 +515,36 @@ function getEllipsePoints(centerLat, centerLng, distAvg, distMin, distMax, sprea
     return points;
 }
 
-// NEW: Dynamically fetch & cache elevation data
+// STROKES GAINED BASELINE EXPECTATIONS
+function getExpectedStrokes(distance, lie, isTee, par) {
+    if (distance <= 0) return 0;
+    if (isTee) {
+        if (par === 3) return 3.1;
+        if (par === 4) return 4.1;
+        if (par === 5) return 5.1;
+    }
+    if (lie === "Green") return 1.5 + (distance / 25);
+    
+    let expected = 2.0 + (distance / 120); 
+    if (lie === "Left Rough" || lie === "Right Rough") expected += 0.3;
+    else if (lie === "Short/Long") expected += 0.5;
+    
+    return expected;
+}
+
+// HARDCODED ELEVATION FIXES (to bypass 90m SRTM radar limits)
+const manualElevations = [
+    { lat: 54.200508175763545, lng: -8.421868085861208, elev: 85 }, // Hole 3 Tee
+    { lat: 54.19965465300563, lng: -8.421208262443544, elev: 65 }   // Hole 3 Pin
+];
+
 async function getElevation(lat, lng) {
     if (!lat || !lng) return 0;
+    
+    for (let m of manualElevations) {
+        if (Math.abs(m.lat - lat) < 0.0001 && Math.abs(m.lng - lng) < 0.0001) return m.elev;
+    }
+    
     const cacheKey = `elev_${lat.toFixed(4)}_${lng.toFixed(4)}`;
     let cached = localStorage.getItem(cacheKey);
     if (cached !== null) return parseFloat(cached);
@@ -568,7 +595,7 @@ function initMap() {
             
             if (route.length >= 5) return alert("Maximum 5 targets allowed.");
             
-            route.push({ lat: e.latlng.lat, lng: e.latlng.lng, club: 'Driver' });
+            route.push({ lat: e.latlng.lat, lng: e.latlng.lng });
             
             savedLayups[currentHoleIndex] = route;
             localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
@@ -1011,10 +1038,12 @@ document.getElementById('track-btn').addEventListener('click', () => {
     if (!isTrackingShot) {
         isTrackingShot = true; shotStartLat = currentLat; shotStartLng = currentLng;
         
+        let pin = getValidPinCoords();
+        shotStartDistance = calculateDistance(shotStartLat, shotStartLng, pin.lat, pin.lng);
+        
         if (liveTargetMarker) { 
             shotTargetLat = liveTargetMarker.getLatLng().lat; shotTargetLng = liveTargetMarker.getLatLng().lng; 
         } else {
-            let pin = getValidPinCoords();
             shotTargetLat = pin.lat; shotTargetLng = pin.lng;
         }
         document.getElementById('track-btn').innerText = "End Shot"; document.getElementById('track-btn').style.backgroundColor = "#f39c12"; 
@@ -1045,12 +1074,22 @@ document.getElementById('track-btn').addEventListener('click', () => {
 document.getElementById('save-shot-btn').addEventListener('click', () => {
     const club = document.getElementById('club-select').value; if (!club) return alert("Select a club!");
     
+    let activeShots = safeParse('castleDarganActiveRoundShots', []);
+    let pin = getValidPinCoords();
+    let distToPinEnd = calculateDistance(currentLat, currentLng, pin.lat, pin.lng);
+    let isTee = (activeShots.length === 0);
+    let startLie = isTee ? 'Tee' : activeShots[activeShots.length-1].accuracy;
+    let endLie = document.getElementById('accuracy-select').value;
+    
+    let expStart = getExpectedStrokes(shotStartDistance, startLie, isTee, courseData[currentHoleIndex].par);
+    let expEnd = getExpectedStrokes(distToPinEnd, endLie, false, courseData[currentHoleIndex].par);
+    let sg = parseFloat((expStart - expEnd - 1).toFixed(2));
+    
     const oldShotsStr = localStorage.getItem('castleDarganShots'); let bag = safeParse('castleDarganShots', []);
-    bag.push({ hole: courseData[currentHoleIndex].hole, club: club, distance: pendingDistance, accuracy: document.getElementById('accuracy-select').value, date: new Date().toISOString() });
+    bag.push({ hole: courseData[currentHoleIndex].hole, club: club, distance: pendingDistance, accuracy: endLie, sg: sg, date: new Date().toISOString() });
     localStorage.setItem('castleDarganShots', JSON.stringify(bag));
     
-    let activeShots = safeParse('castleDarganActiveRoundShots', []);
-    activeShots.push({ hole: courseData[currentHoleIndex].hole, club: club, distance: pendingDistance, accuracy: document.getElementById('accuracy-select').value, startLat: shotStartLat, startLng: shotStartLng, endLat: currentLat, endLng: currentLng });
+    activeShots.push({ hole: courseData[currentHoleIndex].hole, club: club, distance: pendingDistance, accuracy: endLie, sg: sg, startLat: shotStartLat, startLng: shotStartLng, endLat: currentLat, endLng: currentLng });
     localStorage.setItem('castleDarganActiveRoundShots', JSON.stringify(activeShots));
 
     updateAnalytics(); resetTrackerUI();
@@ -1228,13 +1267,18 @@ function updateAnalytics() {
             if (scorecard[k]['A'].gir) girCount++;
         }
     }
+    
+    let activeShots = safeParse('castleDarganActiveRoundShots', []);
+    let roundSg = 0;
+    activeShots.forEach(s => roundSg += s.sg || 0);
 
     const statScoreEl = document.getElementById('stat-score');
     if (holesPlayed > 0 && statScoreEl) {
         let stp = totStrokes - totPar; statScoreEl.innerText = stp > 0 ? `+${stp}` : (stp === 0 ? "E" : stp);
         document.getElementById('stat-gir').innerText = Math.round((girCount / holesPlayed) * 100) + "%"; document.getElementById('stat-points').innerText = totPts;
+        document.getElementById('stat-sg').innerText = roundSg > 0 ? `+${roundSg.toFixed(2)}` : roundSg.toFixed(2);
     } else if (statScoreEl) {
-        statScoreEl.innerText = "E"; document.getElementById('stat-gir').innerText = "0%"; document.getElementById('stat-points').innerText = "0";
+        statScoreEl.innerText = "E"; document.getElementById('stat-gir').innerText = "0%"; document.getElementById('stat-points').innerText = "0"; document.getElementById('stat-sg').innerText = "0.00";
     }
     
     const shots = safeParse('castleDarganShots', []);
