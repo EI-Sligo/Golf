@@ -7,7 +7,6 @@ let shotTargetLat = null, shotTargetLng = null;
 
 let map, userMarker, pinMarker, pathLine;
 
-// Separation of Active and Planned Map Elements
 let liveTargetMarker = null; 
 let passiveRouteGroup = null; 
 let plannerRouteGroup = null; 
@@ -470,7 +469,7 @@ document.getElementById('import-file').addEventListener('change', (e) => {
 });
 
 // ==========================================
-// 4. MATH, WEATHER & MAP
+// 4. MATH, WEATHER, ELEVATION & MAP
 // ==========================================
 function calculateDistance(lat1, lon1, lat2, lon2) {
     if (!lat1 || !lat2) return 0;
@@ -491,6 +490,48 @@ function getDestination(lat, lng, distMeters, bearingDeg) {
     const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distMeters/R) + Math.cos(lat1) * Math.sin(distMeters/R) * Math.cos(brng));
     const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distMeters/R) * Math.cos(lat1), Math.cos(distMeters/R) - Math.sin(lat1) * Math.sin(lat2));
     return [toDegrees(lat2), toDegrees(lon2)];
+}
+
+// NEW: Elliptical Dispersion Ring Generator
+function getEllipsePoints(centerLat, centerLng, distAvg, distMin, distMax, spreadAngle, bearing) {
+    let a = ((distMax - distMin) / 2) * 0.9144; 
+    let b = (distAvg * 0.9144) * Math.tan(toRadians(spreadAngle)); 
+    let points = [];
+    for (let i = 0; i <= 360; i += 10) {
+        let rad = toRadians(i);
+        let dx = b * Math.cos(rad);
+        let dy = a * Math.sin(rad);
+        
+        let bearingRad = toRadians(bearing);
+        let rotatedDx = dx * Math.cos(bearingRad) - dy * Math.sin(bearingRad);
+        let rotatedDy = dx * Math.sin(bearingRad) + dy * Math.cos(bearingRad);
+        
+        const R = 6371000;
+        let dLat = rotatedDy / R;
+        let dLng = rotatedDx / (R * Math.cos(toRadians(centerLat)));
+        
+        points.push([centerLat + toDegrees(dLat), centerLng + toDegrees(dLng)]);
+    }
+    return points;
+}
+
+// NEW: Dynamically fetch & cache elevation data
+async function getElevation(lat, lng) {
+    if (!lat || !lng) return 0;
+    const cacheKey = `elev_${lat.toFixed(4)}_${lng.toFixed(4)}`;
+    let cached = localStorage.getItem(cacheKey);
+    if (cached !== null) return parseFloat(cached);
+    
+    try {
+        const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+        const data = await res.json();
+        if (data.elevation && data.elevation.length > 0) {
+            let elev = data.elevation[0];
+            localStorage.setItem(cacheKey, elev);
+            return elev;
+        }
+    } catch(e) { console.log("Elev fetch error"); }
+    return 0; 
 }
 
 async function fetchWeather(lat, lng) {
@@ -604,7 +645,7 @@ document.getElementById('clear-planned-route-btn').addEventListener('click', () 
     map.fitBounds(L.latLngBounds([[tee.lat, tee.lng], [pin.lat, pin.lng]]), { padding: [20, 20], maxZoom: 18 }); 
 });
 
-function renderPlannerUI() {
+async function renderPlannerUI() {
     if (!map) initMap();
     if(plannerRouteGroup && map) map.removeLayer(plannerRouteGroup);
     plannerRouteGroup = L.layerGroup().addTo(map);
@@ -646,7 +687,12 @@ function renderPlannerUI() {
         let start = points[i]; let end = points[i+1];
         let dist = calculateDistance(start.lat, start.lng, end.lat, end.lng);
         let bearing = calculateBearing(start.lat, start.lng, end.lat, end.lng);
-        let playsLike = Math.max(0, Math.round(dist + (Math.cos(toRadians(liveWindDir - bearing)) * liveWindSpeed)));
+        
+        let startElev = await getElevation(start.lat, start.lng);
+        let endElev = await getElevation(end.lat, end.lng);
+        let elevDiffYards = (endElev - startElev) * 1.09361;
+        
+        let playsLike = Math.max(0, Math.round(dist + (Math.cos(toRadians(liveWindDir - bearing)) * liveWindSpeed) + elevDiffYards));
 
         let club = clubs[i];
         if (!club) { 
@@ -675,25 +721,13 @@ function renderPlannerUI() {
         if(data && data.avg && i < points.length - 1) {
             let dispersionAngle = data.spread || 10; 
             let avgMeters = data.avg * 0.9144;
-            let maxMeters = (data.max || data.avg + 20) * 0.9144;
-            let minMeters = (data.min || data.avg - 20) * 0.9144;
-
-            let center = [start.lat, start.lng];
-            let leftMax = getDestination(start.lat, start.lng, maxMeters, bearing - dispersionAngle);
-            let rightMax = getDestination(start.lat, start.lng, maxMeters, bearing + dispersionAngle);
-            let leftMin = getDestination(start.lat, start.lng, minMeters, bearing - dispersionAngle);
-            let rightMin = getDestination(start.lat, start.lng, minMeters, bearing + dispersionAngle);
-
-            L.polygon([ center, leftMax, rightMax ], { color: '#9b59b6', weight: 1, fillOpacity: 0.15 }).addTo(plannerRouteGroup);
-            
-            if(data.max && data.min) {
-                L.polyline([leftMin, rightMin], { color: '#e74c3c', weight: 2, dashArray: '3, 3' }).addTo(plannerRouteGroup);
-                L.polyline([leftMax, rightMax], { color: '#27ae60', weight: 2, dashArray: '3, 3' }).addTo(plannerRouteGroup);
-            }
             
             let avgPoint = getDestination(start.lat, start.lng, avgMeters, bearing);
-            L.polyline([center, avgPoint], { color: '#9b59b6', weight: 2, dashArray: '4, 4' }).addTo(plannerRouteGroup);
-            L.circleMarker(avgPoint, {radius: 4, color: '#9b59b6', fillOpacity: 1}).addTo(plannerRouteGroup);
+            let ellipsePts = getEllipsePoints(avgPoint[0], avgPoint[1], data.avg, data.min || data.avg - 20, data.max || data.avg + 20, dispersionAngle, bearing);
+
+            L.polygon(ellipsePts, { color: '#9b59b6', weight: 2, fillOpacity: 0.2 }).bindTooltip(`${club} Landing Zone`, {direction: 'top'}).addTo(plannerRouteGroup);
+            L.circleMarker(avgPoint, {radius: 4, color: '#9b59b6', fillOpacity: 1}).bindTooltip(`Avg: ${data.avg}y`, {direction: 'top'}).addTo(plannerRouteGroup);
+            L.polyline([[start.lat, start.lng], avgPoint], { color: '#9b59b6', weight: 2, dashArray: '4, 4' }).addTo(plannerRouteGroup);
         }
     }
     
@@ -771,24 +805,12 @@ function drawClubOverlay() {
     const dispersionAngle = data.spread || 10; 
     
     const avgMeters = data.avg * 0.9144;
-    const maxMeters = (data.max || data.avg + 20) * 0.9144;
-    const minMeters = (data.min || data.avg - 20) * 0.9144;
-
-    const leftMax = getDestination(currentLat, currentLng, maxMeters, aimBearing - dispersionAngle);
-    const rightMax = getDestination(currentLat, currentLng, maxMeters, aimBearing + dispersionAngle);
-    const leftMin = getDestination(currentLat, currentLng, minMeters, aimBearing - dispersionAngle);
-    const rightMin = getDestination(currentLat, currentLng, minMeters, aimBearing + dispersionAngle);
-
-    L.polygon([ center, leftMax, rightMax ], { color: '#3498db', weight: 1, fillOpacity: 0.15 }).bindTooltip(`${club} Dispersion Zone`, {direction: 'top'}).addTo(clubOverlayGroup);
-
-    if(data.max && data.min) {
-        L.polyline([leftMin, rightMin], { color: '#e74c3c', weight: 3, dashArray: '5, 5' }).bindTooltip(`Min Distance`, {direction: 'top'}).addTo(clubOverlayGroup);
-        L.polyline([leftMax, rightMax], { color: '#27ae60', weight: 3, dashArray: '5, 5' }).bindTooltip(`Max Distance`, {direction: 'top'}).addTo(clubOverlayGroup);
-    }
-    
     const avgPoint = getDestination(currentLat, currentLng, avgMeters, aimBearing);
-    L.polyline([center, avgPoint], { color: '#f1c40f', weight: 2, dashArray: '4, 4' }).addTo(clubOverlayGroup);
-    L.circleMarker(avgPoint, {radius: 5, color: '#f1c40f', fillOpacity: 1}).bindTooltip(`Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
+    const ellipsePts = getEllipsePoints(avgPoint[0], avgPoint[1], data.avg, data.min || data.avg - 20, data.max || data.avg + 20, dispersionAngle, aimBearing);
+
+    L.polygon(ellipsePts, { color: '#3498db', weight: 2, fillOpacity: 0.25 }).bindTooltip(`${club} Landing Zone`, {direction: 'top'}).addTo(clubOverlayGroup);
+    L.circleMarker(avgPoint, {radius: 4, color: '#f1c40f', fillOpacity: 1}).bindTooltip(`Avg: ${data.avg}y`, {direction: 'top'}).addTo(clubOverlayGroup);
+    L.polyline([[currentLat, currentLng], avgPoint], { color: '#f1c40f', weight: 2, dashArray: '4, 4' }).addTo(clubOverlayGroup);
 }
 
 document.getElementById('clear-live-target-btn').addEventListener('click', () => {
@@ -822,7 +844,7 @@ function updateMapState(tLat, tLng) {
 }
 
 // MAIN LOCATION ENGINE
-function processLocation(lat, lng) {
+async function processLocation(lat, lng) {
     if (!lat || !lng) return; 
     
     currentLat = lat; currentLng = lng;
@@ -844,9 +866,15 @@ function processLocation(lat, lng) {
         }
     }
 
+    let currentElev = await getElevation(currentLat, currentLng);
+    let targetElev = await getElevation(tLat, tLng);
+    let elevDiffYards = (targetElev - currentElev) * 1.09361;
+    let elevText = elevDiffYards > 0 ? `+${Math.round(elevDiffYards)}` : Math.round(elevDiffYards);
+    document.getElementById('elev-display').innerText = `${elevText}y`;
+
     const holeBearing = calculateBearing(currentLat, currentLng, tLat, tLng);
     const effectiveWind = Math.cos(toRadians(liveWindDir - holeBearing)) * liveWindSpeed; 
-    currentPlaysLike = Math.max(0, Math.round(rawYardage + effectiveWind)); 
+    currentPlaysLike = Math.max(0, Math.round(rawYardage + effectiveWind + elevDiffYards)); 
     document.getElementById('plays-like-number').innerText = currentPlaysLike > 0 ? currentPlaysLike : "--";
 
     if(tLat) updateMapState(tLat, tLng); 
@@ -861,10 +889,16 @@ function processLocation(lat, lng) {
             
             let distToLayup = calculateDistance(currentLat, currentLng, lLat, lLng);
             let distToPin = calculateDistance(lLat, lLng, tLat, tLng);
+            
+            let layupElev = await getElevation(lLat, lLng);
+            let layupElevDiff = (layupElev - currentElev) * 1.09361;
+            let pinElevDiff = (targetElev - layupElev) * 1.09361;
+            
             let layupBearing = calculateBearing(currentLat, currentLng, lLat, lLng);
-            let layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed)));
+            let layupPlaysLike = Math.max(0, Math.round(distToLayup + (Math.cos(toRadians(liveWindDir - layupBearing)) * liveWindSpeed) + layupElevDiff));
+            
             let pinBearing = calculateBearing(lLat, lLng, tLat, tLng);
-            let pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed)));
+            let pinPlaysLike = Math.max(0, Math.round(distToPin + (Math.cos(toRadians(liveWindDir - pinBearing)) * liveWindSpeed) + pinElevDiff));
 
             let layupRec = getClubRecommendationData(layupPlaysLike); 
             let pinRec = getClubRecommendationData(pinPlaysLike);
