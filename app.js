@@ -12,6 +12,9 @@ let liveTargetMarker = null;
 let passiveRouteGroup = null; 
 let plannerRouteGroup = null; 
 
+let layupMarkers = []; 
+let plannedClubs = []; 
+
 let yellowLayupIcon = null; 
 let clubOverlayGroup = null; 
 let tracerMap = null; 
@@ -38,46 +41,192 @@ function safeParse(key, fallback) {
     }
 }
 
+// EXACT GPS COORDINATES LOADED
 const courseData = [
-    { hole: 1, lat: 54.19860260754416, lng: -8.430412853346407, par: 4, si: 9, redPar: 4, redSi: 13, yds: { blue: 406, white: 379, green: 370, red: 337 }, bearing: 80 },
-    { hole: 2, lat: 54.200161814306895, lng: -8.424006844479758, par: 4, si: 3, redPar: 5, redSi: 11, yds: { blue: 507, white: 452, green: 444, red: 423 }, bearing: 250 },
-    { hole: 3, lat: 54.19966549964856, lng: -8.421158440726037, par: 3, si: 17, redPar: 3, redSi: 15, yds: { blue: 121, white: 117, green: 117, red: 113 }, bearing: 10 },
-    { hole: 4, lat: 54.198003141877244, lng: -8.426296058686598, par: 4, si: 7, redPar: 4, redSi: 9, yds: { blue: 383, white: 373, green: 363, red: 326 }, bearing: 80 },
-    { hole: 5, lat: 54.195054143085194, lng: -8.424626387916812, par: 4, si: 1, redPar: 4, redSi: 5, yds: { blue: 419, white: 414, green: 406, red: 314 }, bearing: 170 },
-    { hole: 6, lat: 54.197729016023416, lng: -8.428028264871996, par: 5, si: 13, redPar: 5, redSi: 1, yds: { blue: 493, white: 474, green: 465, red: 421 }, bearing: 320 },
-    { hole: 7, lat: 54.19744322884829, lng: -8.430189504889343, par: 3, si: 11, redPar: 3, redSi: 7, yds: { blue: 176, white: 173, green: 168, red: 143 }, bearing: 10 },
-    { hole: 8, lat: 54.19736299578223, lng: -8.435396580824467, par: 4, si: 5, redPar: 5, redSi: 17, yds: { blue: 454, white: 409, green: 400, red: 392 }, bearing: 260 },
-    { hole: 9, lat: 54.19507439833819, lng: -8.429110879230992, par: 5, si: 15, redPar: 5, redSi: 3, yds: { blue: 538, white: 517, green: 511, red: 492 }, bearing: 210 },
-    { hole: 10, lat: 54.19671199778983, lng: -8.435360933020018, par: 5, si: 18, redPar: 5, redSi: 16, yds: { blue: 478, white: 478, green: 422, red: 393 }, bearing: 110 },
-    { hole: 11, lat: 54.19579018888728, lng: -8.43634336114162, par: 3, si: 12, redPar: 3, redSi: 8, yds: { blue: 147, white: 132, green: 132, red: 121 }, bearing: 260 },
-    { hole: 12, lat: 54.19446026733953, lng: -8.431195981102197, par: 4, si: 10, redPar: 4, redSi: 10, yds: { blue: 390, white: 367, green: 360, red: 326 }, bearing: 140 },
-    { hole: 13, lat: 54.19470554657755, lng: -8.428031811482342, par: 3, si: 14, redPar: 3, redSi: 14, yds: { blue: 192, white: 188, green: 182, red: 130 }, bearing: 190 },
-    { hole: 14, lat: 54.196793028209356, lng: -8.431739134965177, par: 4, si: 6, redPar: 5, redSi: 2, yds: { blue: 471, white: 436, green: 430, red: 404 }, bearing: 310 },
-    { hole: 15, lat: 54.19745026248579, lng: -8.430184002328804, par: 4, si: 16, redPar: 4, redSi: 12, yds: { blue: 262, white: 259, green: 256, red: 217 }, bearing: 100 },
-    { hole: 16, lat: 54.200159600739354, lng: -8.423991679297862, par: 4, si: 8, redPar: 4, redSi: 18, yds: { blue: 422, white: 417, green: 408, red: 285 }, bearing: 70 },
-    { hole: 17, lat: 54.199393705917096, lng: -8.431547274737586, par: 4, si: 4, redPar: 4, redSi: 6, yds: { blue: 439, white: 431, green: 395, red: 360 }, bearing: 260 },
-    { hole: 18, lat: 54.198736264449, lng: -8.4366211658155, par: 4, si: 2, redPar: 4, redSi: 4, yds: { blue: 455, white: 435, green: 412, red: 344 }, bearing: 260 }
+    { 
+        hole: 1, par: 4, si: 9, redPar: 4, redSi: 13, yds: { blue: 406, white: 379, green: 370, red: 337 },
+        lat: 54.19859400089567, lng: -8.430418968200685, 
+        tees: {
+            blue: {lat: 54.19780633925876, lng: -8.435885310173036},
+            white: {lat: 54.19785968733364, lng: -8.435504436492922},
+            green: {lat: 54.197960107052474, lng: -8.434919714927675},
+            red: {lat: 54.197960107052474, lng: -8.434919714927675}
+        }
+    },
+    { 
+        hole: 2, par: 4, si: 3, redPar: 5, redSi: 11, yds: { blue: 507, white: 452, green: 444, red: 423 },
+        lat: 54.19974251645647, lng: -8.423123359680178, 
+        tees: {
+            blue: {lat: 54.19842140700065, lng: -8.429828882217409},
+            white: {lat: 54.19846847813442, lng: -8.428927659988405},
+            green: {lat: 54.19846847813442, lng: -8.428927659988405},
+            red: {lat: 54.19846847813442, lng: -8.428927659988405}
+        }
+    },
+    { 
+        hole: 3, par: 3, si: 17, redPar: 3, redSi: 15, yds: { blue: 121, white: 117, green: 117, red: 113 },
+        lat: 54.19965465300563, lng: -8.421208262443544, 
+        tees: {
+            blue: {lat: 54.200508175763545, lng: -8.421868085861208},
+            white: {lat: 54.200508175763545, lng: -8.421868085861208},
+            green: {lat: 54.200508175763545, lng: -8.421868085861208},
+            red: {lat: 54.200508175763545, lng: -8.421868085861208}
+        }
+    },
+    { 
+        hole: 4, par: 4, si: 7, redPar: 4, redSi: 9, yds: { blue: 383, white: 373, green: 363, red: 326 },
+        lat: 54.19799148816457, lng: -8.426374197006227, 
+        tees: {
+            blue: {lat: 54.19927181721808, lng: -8.42155158519745},
+            white: {lat: 54.19900194723657, lng: -8.422232866287233},
+            green: {lat: 54.19900194723657, lng: -8.422232866287233},
+            red: {lat: 54.19900194723657, lng: -8.422232866287233}
+        }
+    },
+    { 
+        hole: 5, par: 4, si: 1, redPar: 4, redSi: 5, yds: { blue: 419, white: 414, green: 406, red: 314 },
+        lat: 54.195025867795906, lng: -8.424695134162905, 
+        tees: {
+            blue: {lat: 54.19792558780164, lng: -8.426953554153444},
+            white: {lat: 54.19720695321352, lng: -8.426449298858644},
+            green: {lat: 54.19720695321352, lng: -8.426449298858644},
+            red: {lat: 54.19720695321352, lng: -8.426449298858644}
+        }
+    },
+    { 
+        hole: 6, par: 5, si: 13, redPar: 5, redSi: 1, yds: { blue: 493, white: 474, green: 465, red: 421 },
+        lat: 54.197737300471424, lng: -8.428021073341371, 
+        tees: {
+            blue: {lat: 54.19467437275792, lng: -8.425092101097109},
+            white: {lat: 54.19483442890481, lng: -8.425338864326479},
+            green: {lat: 54.19508549612187, lng: -8.425869941711428},
+            red: {lat: 54.19508549612187, lng: -8.425869941711428}
+        }
+    },
+    { 
+        hole: 7, par: 3, si: 11, redPar: 3, redSi: 7, yds: { blue: 176, white: 173, green: 168, red: 143 },
+        lat: 54.1976274657993, lng: -8.429448008537294, 
+        tees: {
+            blue: {lat: 54.19835550732333, lng: -8.427339792251589},
+            white: {lat: 54.198330402656694, lng: -8.427854776382448},
+            green: {lat: 54.198330402656694, lng: -8.427854776382448},
+            red: {lat: 54.198330402656694, lng: -8.427854776382448}
+        }
+    },
+    { 
+        hole: 8, par: 4, si: 5, redPar: 5, redSi: 17, yds: { blue: 454, white: 409, green: 400, red: 392 },
+        lat: 54.197345032444865, lng: -8.435434699058534, 
+        tees: {
+            blue: {lat: 54.19829902180197, lng: -8.429378271102907},
+            white: {lat: 54.19812956477465, lng: -8.43007564544678},
+            green: {lat: 54.19812956477465, lng: -8.43007564544678},
+            red: {lat: 54.19812956477465, lng: -8.43007564544678}
+        }
+    },
+    { 
+        hole: 9, par: 5, si: 15, redPar: 5, redSi: 3, yds: { blue: 538, white: 517, green: 511, red: 492 },
+        lat: 54.19506352780125, lng: -8.429110050201418, 
+        tees: {
+            blue: {lat: 54.19714732794827, lng: -8.435767292976381},
+            white: {lat: 54.19705318261749, lng: -8.435450792312624},
+            green: {lat: 54.19699355713039, lng: -8.435123562812807},
+            red: {lat: 54.19699355713039, lng: -8.435123562812807}
+        }
+    },
+    { 
+        hole: 10, par: 5, si: 18, redPar: 5, redSi: 16, yds: { blue: 478, white: 478, green: 422, red: 393 },
+        lat: 54.19669856661285, lng: -8.435370326042177, 
+        tees: {
+            blue: {lat: 54.194683787842536, lng: -8.429726958274843},
+            white: {lat: 54.194821875503955, lng: -8.430451154708864},
+            green: {lat: 54.19492544094721, lng: -8.430907130241396},
+            red: {lat: 54.19492544094721, lng: -8.430907130241396}
+        }
+    },
+    { 
+        hole: 11, par: 3, si: 12, redPar: 3, redSi: 8, yds: { blue: 147, white: 132, green: 132, red: 121 },
+        lat: 54.19578533793845, lng: -8.43630373477936, 
+        tees: {
+            blue: {lat: 54.19696845163641, lng: -8.436405658721926},
+            white: {lat: 54.19683664754276, lng: -8.43652904033661},
+            green: {lat: 54.19674250150422, lng: -8.436657786369326},
+            red: {lat: 54.19674250150422, lng: -8.436657786369326}
+        }
+    },
+    { 
+        hole: 12, par: 4, si: 10, redPar: 4, redSi: 10, yds: { blue: 390, white: 367, green: 360, red: 326 },
+        lat: 54.19445468684118, lng: -8.431223630905153, 
+        tees: {
+            blue: {lat: 54.19624038567661, lng: -8.435820937156679},
+            white: {lat: 54.19619331200501, lng: -8.435370326042177},
+            green: {lat: 54.19619331200501, lng: -8.435370326042177},
+            red: {lat: 54.19619331200501, lng: -8.435370326042177}
+        }
+    },
+    { 
+        hole: 13, par: 3, si: 14, redPar: 3, redSi: 14, yds: { blue: 192, white: 188, green: 182, red: 130 },
+        lat: 54.19468064948124, lng: -8.428004980087282, 
+        tees: {
+            blue: {lat: 54.19424755333589, lng: -8.430520892143251},
+            white: {lat: 54.19448293223874, lng: -8.42978596687317},
+            green: {lat: 54.19448293223874, lng: -8.42978596687317},
+            red: {lat: 54.19448293223874, lng: -8.42978596687317}
+        }
+    },
+    { 
+        hole: 14, par: 4, si: 6, redPar: 5, redSi: 2, yds: { blue: 471, white: 436, green: 430, red: 404 },
+        lat: 54.19674250150422, lng: -8.431743979454042, 
+        tees: {
+            blue: {lat: 54.1945362846037, lng: -8.426620960235597},
+            white: {lat: 54.19483442890481, lng: -8.426910638809206},
+            green: {lat: 54.19509491111282, lng: -8.427114486694338},
+            red: {lat: 54.19509491111282, lng: -8.427114486694338}
+        }
+    },
+    { 
+        hole: 15, par: 4, si: 16, redPar: 4, redSi: 12, yds: { blue: 262, white: 259, green: 256, red: 217 },
+        lat: 54.19744545341424, lng: -8.430241942405702, 
+        tees: {
+            blue: {lat: 54.196893135062936, lng: -8.433519601821901},
+            white: {lat: 54.19682409475002, lng: -8.432983160018923},
+            green: {lat: 54.19682409475002, lng: -8.432983160018923},
+            red: {lat: 54.19682409475002, lng: -8.432983160018923}
+        }
+    },
+    { 
+        hole: 16, par: 4, si: 8, redPar: 4, redSi: 18, yds: { blue: 422, white: 417, green: 408, red: 285 },
+        lat: 54.20015672735122, lng: -8.4240460395813, 
+        tees: {
+            blue: {lat: 54.19897370492735, lng: -8.429507017135622},
+            white: {lat: 54.19938478552425, lng: -8.427742123603823},
+            green: {lat: 54.19938478552425, lng: -8.427742123603823},
+            red: {lat: 54.19938478552425, lng: -8.427742123603823}
+        }
+    },
+    { 
+        hole: 17, par: 4, si: 4, redPar: 4, redSi: 6, yds: { blue: 439, white: 431, green: 395, red: 360 },
+        lat: 54.199394199535845, lng: -8.431577682495119, 
+        tees: {
+            blue: {lat: 54.20047365864112, lng: -8.4258109331131},
+            white: {lat: 54.20047365864112, lng: -8.4258109331131},
+            green: {lat: 54.20047365864112, lng: -8.4258109331131},
+            red: {lat: 54.20047365864112, lng: -8.4258109331131}
+        }
+    },
+    { 
+        hole: 18, par: 4, si: 2, redPar: 4, redSi: 4, yds: { blue: 455, white: 435, green: 412, red: 344 },
+        lat: 54.19867245242783, lng: -8.436625599861147, 
+        tees: {
+            blue: {lat: 54.199111778255684, lng: -8.43081593513489},
+            white: {lat: 54.19904274164916, lng: -8.431105613708498},
+            green: {lat: 54.19891722025095, lng: -8.432028293609621},
+            red: {lat: 54.19891722025095, lng: -8.432028293609621}
+        }
+    }
 ];
 
 const toRadians = deg => deg * (Math.PI / 180);
 const toDegrees = rad => rad * (180 / Math.PI);
-
-function generateTees() {
-    courseData.forEach(h => {
-        h.tees = {};
-        for (const [color, yards] of Object.entries(h.yds)) {
-            const distanceMeters = yards * 0.9144; 
-            const bearingRad = toRadians(h.bearing); 
-            const R = 6371000;
-            const latRad = toRadians(h.lat); 
-            const lngRad = toRadians(h.lng);
-            const newLatRad = Math.asin(Math.sin(latRad) * Math.cos(distanceMeters / R) + Math.cos(latRad) * Math.sin(distanceMeters / R) * Math.cos(bearingRad));
-            const newLngRad = lngRad + Math.atan2(Math.sin(bearingRad) * Math.sin(distanceMeters / R) * Math.cos(latRad), Math.cos(distanceMeters / R) - Math.sin(latRad) * Math.sin(newLatRad));
-            h.tees[color] = { lat: toDegrees(newLatRad), lng: toDegrees(newLngRad) };
-        }
-    });
-}
-generateTees();
 
 const baselineYardages = { 
     "High": { "Driver": { avg: 200, min: 160, max: 220, spread: 15 }, "3 Wood": { avg: 180, min: 140, max: 195, spread: 14 }, "5 Wood": { avg: 170, min: 135, max: 185, spread: 13 }, "4 Hybrid": { avg: 160, min: 130, max: 175, spread: 12 }, "5 Hybrid": { avg: 150, min: 125, max: 165, spread: 12 }, "4 Iron": { avg: 150, min: 120, max: 165, spread: 11 }, "5 Iron": { avg: 145, min: 115, max: 160, spread: 10 }, "6 Iron": { avg: 140, min: 115, max: 155, spread: 9 }, "7 Iron": { avg: 130, min: 110, max: 145, spread: 8 }, "8 Iron": { avg: 120, min: 100, max: 135, spread: 7 }, "9 Iron": { avg: 110, min: 95, max: 125, spread: 6 }, "PW": { avg: 100, min: 85, max: 115, spread: 5 }, "GW": { avg: 90, min: 80, max: 105, spread: 5 }, "SW": { avg: 80, min: 70, max: 95, spread: 5 }, "Putter": { avg: 15, min: 5, max: 30, spread: 2 } }, 
@@ -374,13 +523,14 @@ function initMap() {
     map.on('click', function(e) {
         if (isPlannerMode) {
             let savedLayups = safeParse('castleDarganLayups', {});
-            if (!savedLayups[currentHoleIndex]) savedLayups[currentHoleIndex] = [];
+            let route = getValidLayups();
             
-            if (savedLayups[currentHoleIndex].length >= 5) return alert("Maximum 5 targets allowed.");
+            if (route.length >= 5) return alert("Maximum 5 targets allowed.");
             
-            savedLayups[currentHoleIndex].push({ lat: e.latlng.lat, lng: e.latlng.lng });
+            route.push({ lat: e.latlng.lat, lng: e.latlng.lng, club: 'Driver' });
+            
+            savedLayups[currentHoleIndex] = route;
             localStorage.setItem('castleDarganLayups', JSON.stringify(savedLayups));
-            
             renderPlannerUI();
             
         } else {
@@ -412,7 +562,7 @@ function saveNewTeeLocation(latlng) {
 
 
 // ==========================================
-// NEW: DYNAMIC MULTI-SHOT PLANNER (PLANNER MODE ONLY)
+// DYNAMIC MULTI-SHOT PLANNER (PLANNER MODE ONLY)
 // ==========================================
 document.getElementById('undo-planned-target-btn').addEventListener('click', () => {
     let savedLayups = safeParse('castleDarganLayups', {});
@@ -522,7 +672,7 @@ function renderPlannerUI() {
             </div>`;
             
         let data = analytics[club];
-        if(data && data.avg) {
+        if(data && data.avg && i < points.length - 1) {
             let dispersionAngle = data.spread || 10; 
             let avgMeters = data.avg * 0.9144;
             let maxMeters = (data.max || data.avg + 20) * 0.9144;
