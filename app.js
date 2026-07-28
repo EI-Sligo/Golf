@@ -225,6 +225,14 @@ const courseData = [
     }
 ];
 
+// NEW: OFFICIAL WHS COURSE RATINGS
+const courseRatings = {
+    blue: { rating: 73.4, slope: 126 },
+    white: { rating: 72.1, slope: 121 },
+    green: { rating: 67.9, slope: 113 },
+    red: { rating: 72.5, slope: 122 } 
+};
+
 const toRadians = deg => deg * (Math.PI / 180);
 const toDegrees = rad => rad * (180 / Math.PI);
 
@@ -352,7 +360,7 @@ function showToast(msg, onUndoCallback) {
 // ==========================================
 document.getElementById('tab-play').addEventListener('click', () => switchTab('play'));
 document.getElementById('tab-history').addEventListener('click', () => switchTab('history'));
-document.getElementById('tab-settings').addEventListener('click', () => switchTab('settings'));
+document.getElementById('tab-settings').addEventListener('click', () => { switchTab('settings'); updateWHSDisplay(); });
 
 function switchTab(t) {
     document.querySelectorAll('.nav-btn, .view-section').forEach(el => el.classList.remove('active'));
@@ -440,6 +448,46 @@ window.deleteShot = function(originalIdx) {
     }
 }
 
+// NEW: WHS ESTIMATED HANDICAP CALCULATOR
+function updateWHSDisplay() {
+    let history = safeParse('castleDarganHistory', []);
+    let diffs = [];
+    
+    history.forEach(r => {
+        if (r.holesPlayed === 18 && r.strokes && r.tee) {
+            let crData = courseRatings[r.tee];
+            if (crData) {
+                let diff = (r.strokes - crData.rating) * (113 / crData.slope);
+                diffs.push(diff);
+            }
+        }
+    });
+
+    if (diffs.length === 0) {
+        document.getElementById('whs-estimate-display').innerText = "Needs 18-Hole Round";
+        return;
+    }
+
+    diffs = diffs.slice(-20);
+    let sorted = [...diffs].sort((a,b) => a - b);
+    let numRounds = diffs.length;
+    let hcp = 0;
+
+    if (numRounds <= 3) hcp = sorted[0] - 2;
+    else if (numRounds === 4) hcp = sorted[0] - 1;
+    else if (numRounds === 5) hcp = sorted[0];
+    else if (numRounds === 6) hcp = ((sorted[0] + sorted[1]) / 2) - 1;
+    else if (numRounds >= 7 && numRounds <= 8) hcp = (sorted[0] + sorted[1]) / 2;
+    else if (numRounds >= 9 && numRounds <= 11) hcp = (sorted[0] + sorted[1] + sorted[2]) / 3;
+    else if (numRounds >= 12 && numRounds <= 14) hcp = (sorted[0] + sorted[1] + sorted[2] + sorted[3]) / 4;
+    else if (numRounds >= 15 && numRounds <= 16) hcp = (sorted.slice(0, 5).reduce((a,b)=>a+b,0)) / 5;
+    else if (numRounds >= 17 && numRounds <= 18) hcp = (sorted.slice(0, 6).reduce((a,b)=>a+b,0)) / 6;
+    else if (numRounds === 19) hcp = (sorted.slice(0, 7).reduce((a,b)=>a+b,0)) / 7;
+    else hcp = (sorted.slice(0, 8).reduce((a,b)=>a+b,0)) / 8;
+
+    document.getElementById('whs-estimate-display').innerText = Math.max(0, hcp).toFixed(1);
+}
+
 document.getElementById('export-btn').addEventListener('click', () => {
     const backupData = { 
         shots: safeParse('castleDarganShots', []), scorecard: safeParse('castleDarganScorecard', {}), bag: safeParse('castleDarganBag', defaultBag), 
@@ -517,7 +565,6 @@ function getEllipsePoints(centerLat, centerLng, distAvg, distMin, distMax, sprea
     return points;
 }
 
-// STROKES GAINED BASELINE EXPECTATIONS
 function getExpectedStrokes(distance, lie, isTee, par) {
     if (distance <= 0) return 0;
     if (isTee) {
@@ -534,15 +581,10 @@ function getExpectedStrokes(distance, lie, isTee, par) {
     return expected;
 }
 
-// NEW: Advanced Physics Elevation Adjustment
 function calculateElevationAdjustment(elevDiffYards) {
     if (elevDiffYards === 0) return 0;
-    // beta = 42 degrees (Average golf ball descent angle)
     const betaRad = 42 * (Math.PI / 180);
-    // k = aerodynamic drag constant for a golf ball
     const k = 0.003; 
-    
-    // Delta Yards = y / tan(beta) + k * y^2
     const adjustment = (elevDiffYards / Math.tan(betaRad)) + (k * Math.pow(elevDiffYards, 2));
     return adjustment;
 }
@@ -576,6 +618,7 @@ async function fetchWeather(lat, lng) {
         document.getElementById('wind-dir-icon').innerHTML = `<span style="display:inline-block; transform: rotate(${liveWindDir}deg);">↓</span>`;
     } catch (err) { console.log("Weather failed"); }
 }
+
 document.getElementById('refresh-weather-btn').addEventListener('click', () => { if(currentLat) fetchWeather(currentLat, currentLng); });
 
 function initMap() {
@@ -633,7 +676,6 @@ function saveNewTeeLocation(latlng) {
     if (isPlannerMode) processLocation(latlng.lat, latlng.lng, null);
 }
 
-// NEW: Save Pin GPS Elevation
 document.getElementById('save-pin-elev-btn').addEventListener('click', () => {
     if (currentAltitude === null) return alert("Waiting for GPS altitude data from your device...");
     
@@ -985,6 +1027,57 @@ async function processLocation(lat, lng, alt) {
     }
 }
 
+// ==========================================
+// FIX: REMOVED EVENT LISTENER NESTING SCOPE BUG
+// ==========================================
+function updateHoleDisplay() {
+    if (!map) initMap(); 
+    
+    hasCenteredMapThisHole = false; hasReachedGreen = false;
+    const hd = courseData[currentHoleIndex]; const selectedTee = document.getElementById('tee-box-select').value;
+    const activePar = selectedTee === 'red' ? hd.redPar : hd.par; const activeSi = selectedTee === 'red' ? hd.redSi : hd.si; const officialYardage = hd.yds[selectedTee]; 
+
+    document.getElementById('current-hole').innerText = `Hole ${hd.hole}`;
+    document.getElementById('hole-par-display').innerText = `Par ${activePar} | SI ${activeSi} | ${officialYardage}y`;
+    document.getElementById('scorecard-hole-num').innerText = hd.hole;
+    
+    renderMultiplayerScorecard();
+
+    let pin = getValidPinCoords();
+
+    if (isPlannerMode) {
+        document.getElementById('planner-controls-box').style.display = 'block';
+        document.getElementById('live-target-box').style.display = 'none';
+        document.getElementById('club-overlay-select').style.display = 'none';
+        if(liveTargetMarker && map) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
+        
+        renderPlannerUI();
+
+        if(userMarker) { userMarker.dragging.enable(); }
+        let teeCoords = getValidTeeCoords();
+        processLocation(teeCoords.lat, teeCoords.lng, null);
+    } else {
+        document.getElementById('planner-controls-box').style.display = 'none';
+        document.getElementById('club-overlay-select').style.display = 'block';
+        if(plannerRouteGroup && map) map.removeLayer(plannerRouteGroup);
+        if(liveTargetMarker && map) { map.removeLayer(liveTargetMarker); liveTargetMarker = null; }
+        document.getElementById('live-target-box').style.display = 'none';
+        
+        if(userMarker) { userMarker.dragging.disable(); }
+        updateMapState(pin.lat, pin.lng);
+        
+        drawPassivePlannedRoute();
+        
+        if (currentLat && currentLng) {
+            processLocation(currentLat, currentLng, currentAltitude);
+        }
+    }
+}
+
+// EVENT LISTENERS MOVED OUT TO ROOT SCOPE
+document.getElementById('next-hole').addEventListener('click', () => { if (currentHoleIndex < courseData.length - 1) { currentHoleIndex++; updateHoleDisplay(); }});
+document.getElementById('prev-hole').addEventListener('click', () => { if (currentHoleIndex > 0) { currentHoleIndex--; updateHoleDisplay(); }});
+
 function initGPS() {
     if ("geolocation" in navigator) {
         gpsWatchId = navigator.geolocation.watchPosition(
@@ -1284,7 +1377,6 @@ window.updatePlayerScore = function(playerId, hcp, par, si) {
     const strokes = parseInt(document.getElementById(`strokes-${playerId}`).value); const ptsEl = document.getElementById(`pts-${playerId}`);
     if (strokes) { ptsEl.innerText = calculateStableford(strokes, par, si, hcp) + " Pts"; } else { ptsEl.innerText = "0 Pts"; }
     
-    // Strict automatic GIR calculation: Strokes minus putts must equal Par minus 2
     if (playerId === 'A') { 
         const putts = parseInt(document.getElementById('putts-A').value); 
         if (strokes && putts >= 0) {
@@ -1393,6 +1485,7 @@ document.getElementById('end-round-btn').addEventListener('click', () => {
             holesPlayed: Object.keys(scorecard).length, 
             points: totPts, 
             strokes: totStrokes, 
+            tee: document.getElementById('tee-box-select').value,
             shots: safeParse('castleDarganActiveRoundShots', []),
             scorecard: scorecard
         });
