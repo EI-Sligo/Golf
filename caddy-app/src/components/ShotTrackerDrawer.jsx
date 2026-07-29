@@ -1,101 +1,114 @@
-import React, { useState } from 'react';
-import { Target, Flag, CircleCheck, AlertTriangle, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MapPin, Navigation, Save, X, Target } from 'lucide-react';
+import { useGolfStore } from '../store/useGolfStore';
+import { calculateYardage } from '../utils/distance';
 
-export default function ShotTrackerDrawer({
-  isTracking,
-  pendingDistance,
-  clubs = ["Driver", "3 Wood", "4 Hybrid", "5 Iron", "7 Iron", "8 Iron", "9 Iron", "PW", "SW", "Putter"],
-  onStartShot,
-  onSaveShot,
-  onCancelShot
-}) {
-  const [selectedClub, setSelectedClub] = useState(clubs[0] || 'Driver');
-  const [selectedAccuracy, setSelectedAccuracy] = useState('Fairway');
+export default function ShotTrackerDrawer({ isTracking, onStartShot, onSaveShot, onCancelShot }) {
+  const { currentLat, currentLng } = useGolfStore();
+  const [startPos, setStartPos] = useState(null);
+  const [walkedDistance, setWalkedDistance] = useState(0);
+  const [club, setClub] = useState('Driver');
+  const [accuracy, setAccuracy] = useState('Center');
 
-  const accuracyOptions = [
-    { id: 'Fairway', label: 'Fairway / Target', icon: Target, color: 'border-emerald-500 text-emerald-400 bg-emerald-500/10' },
-    { id: 'Left Rough', label: 'Left Miss', icon: AlertTriangle, color: 'border-amber-500 text-amber-400 bg-amber-500/10' },
-    { id: 'Right Rough', label: 'Right Miss', icon: AlertTriangle, color: 'border-amber-500 text-amber-400 bg-amber-500/10' },
-    { id: 'Green', label: 'On Green', icon: CircleCheck, color: 'border-sky-500 text-sky-400 bg-sky-500/10' },
-  ];
+  const clubs = ['Driver', '3 Wood', '4 Hybrid', '4 Iron', '5 Iron', '6 Iron', '7 Iron', '8 Iron', '9 Iron', 'PW', 'GW', 'SW', 'LW'];
+  const accuracies = ['Left', 'Center', 'Right', 'Short', 'Long'];
+
+  // Calculate distance as user walks
+  useEffect(() => {
+    if (startPos && currentLat && currentLng) {
+      const dist = calculateYardage(startPos.lat, startPos.lng, currentLat, currentLng);
+      setWalkedDistance(dist);
+    }
+  }, [currentLat, currentLng, startPos]);
+
+  // Reset when closed
+  useEffect(() => {
+    if (!isTracking) {
+      setStartPos(null);
+      setWalkedDistance(0);
+    }
+  }, [isTracking]);
+
+  if (!isTracking) return null;
+
+  const handleMarkStart = () => {
+    if (currentLat && currentLng) {
+      setStartPos({ lat: currentLat, lng: currentLng });
+    } else {
+      alert("Waiting for GPS signal...");
+    }
+  };
+
+  const handleSave = () => {
+    onSaveShot({ club, distance: walkedDistance, accuracy });
+    setStartPos(null);
+    setWalkedDistance(0);
+  };
 
   return (
-    <div className="w-full mt-4 z-20 relative">
-      {!isTracking ? (
-        <button
-          onClick={onStartShot}
-          className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-black text-lg shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
+    <div className="fixed inset-x-0 bottom-0 z-50 bg-slate-900 border-t border-slate-800 rounded-t-3xl p-5 animate-in slide-in-from-bottom-full duration-300 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-xl font-black text-white">Track Shot</h3>
+          <p className="text-sky-400 font-bold text-xs uppercase tracking-wider">Walk to ball</p>
+        </div>
+        <button onClick={onCancelShot} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {!startPos ? (
+        <button 
+          onClick={handleMarkStart}
+          className="w-full py-4 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-xl text-lg flex items-center justify-center gap-2 transition-colors mb-4 shadow-lg shadow-sky-500/20"
         >
-          <Flag className="w-5 h-5 stroke-[2.5]" />
-          Start Tracking Shot
+          <MapPin className="w-5 h-5" />
+          Mark Start Location
         </button>
       ) : (
-        <div className="w-full rounded-2xl bg-slate-900 border border-slate-700/80 p-5 shadow-2xl animate-in slide-in-from-bottom duration-300">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-            <h3 className="font-bold text-lg text-white">Shot Recorded</h3>
-            <button onClick={onCancelShot} className="text-slate-400 hover:text-rose-400 p-1 rounded-lg">
-              <X className="w-5 h-5" />
-            </button>
+        <div className="space-y-6">
+          <div className="bg-slate-950 rounded-2xl p-6 text-center border border-slate-800 relative overflow-hidden">
+            <div className="absolute inset-0 bg-sky-500/5 animate-pulse"></div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">GPS Distance Walked</p>
+            <div className="flex items-baseline justify-center gap-1">
+              <span className="text-5xl font-black text-white">{walkedDistance}</span>
+              <span className="text-sky-400 font-bold">yds</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-2 flex items-center justify-center gap-1">
+              <Navigation className="w-3 h-3" /> Tracking real-time location...
+            </p>
           </div>
 
-          {/* Measured Distance Header */}
-          <div className="text-center my-3 bg-slate-950 py-3 rounded-xl border border-slate-800">
-            <span className="text-xs uppercase font-bold text-slate-400">Tracked Distance</span>
-            <p className="text-4xl font-black text-emerald-400">{pendingDistance} <span className="text-sm font-bold text-slate-400">YDS</span></p>
-          </div>
-
-          {/* Club Selection Grid */}
-          <div className="mb-4">
-            <label className="text-xs font-bold uppercase text-slate-400 mb-2 block">Club Used</label>
-            <select
-              value={selectedClub}
-              onChange={(e) => setSelectedClub(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-3 font-semibold text-sm focus:outline-none focus:border-emerald-500"
-            >
-              {clubs.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tactile Outcome Buttons */}
-          <div className="mb-5">
-            <label className="text-xs font-bold uppercase text-slate-400 mb-2 block">Shot Outcome</label>
-            <div className="grid grid-cols-2 gap-2">
-              {accuracyOptions.map((opt) => {
-                const Icon = opt.icon;
-                const isSelected = selectedAccuracy === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => setSelectedAccuracy(opt.id)}
-                    className={`flex items-center gap-2 p-3 rounded-xl border font-bold text-xs transition-all ${
-                      isSelected ? opt.color : 'border-slate-800 bg-slate-950/50 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{opt.label}</span>
-                  </button>
-                );
-              })}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase">Club Used</label>
+              <select 
+                value={club} 
+                onChange={(e) => setClub(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-sky-500 focus:outline-none"
+              >
+                {clubs.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase">Shot Result</label>
+              <select 
+                value={accuracy} 
+                onChange={(e) => setAccuracy(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-sky-500 focus:outline-none"
+              >
+                {accuracies.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => onSaveShot({ club: selectedClub, accuracy: selectedAccuracy, distance: pendingDistance })}
-              className="flex-1 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-md transition-all"
-            >
-              Save Shot
-            </button>
-            <button
-              onClick={onCancelShot}
-              className="py-3.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-all"
-            >
-              Discard
-            </button>
-          </div>
+          <button 
+            onClick={handleSave}
+            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-lg flex items-center justify-center gap-2 transition-colors shadow-lg shadow-emerald-500/20"
+          >
+            <Save className="w-5 h-5" />
+            Save Shot
+          </button>
         </div>
       )}
     </div>
