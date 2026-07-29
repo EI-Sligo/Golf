@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+body {
+  background-color: #020617; /* slate-950 */
+  color: #f1f5f9; /* slate-100 */
+  touch-action: pan-y;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}

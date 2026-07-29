@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+body {
+  background-color: #020617; /* Slate 950 for the dark native app feel */
+  color: #f1f5f9; 
+  touch-action: pan-y;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
