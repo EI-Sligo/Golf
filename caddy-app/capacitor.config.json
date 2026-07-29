@@ -1,0 +1,6 @@
+{
+  "appId": "com.yourname.golfcaddy",
+  "appName": "Castle Dargan Caddy",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
