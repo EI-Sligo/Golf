@@ -15,6 +15,7 @@ import { calculateYardage } from './utils/distance';
 import { fetchLiveWeather, calculatePlaysLike, getRecommendedClub } from './utils/physics';
 import { castleDargan } from './data/castleDargan';
 import { Menu, History, Briefcase, Target, Book, ClipboardList, X, PlayCircle } from 'lucide-react';
+import { Geolocation } from '@capacitor/geolocation';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -40,11 +41,49 @@ export default function App() {
   const currentHoleData = castleDargan[activeHole - 1];
   const pinLocation = [currentHoleData.lat, currentHoleData.lng]; 
 
+  // 3. Native Hardware GPS Tracker (Capacitor)
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-    return () => subscription.unsubscribe();
-  }, []);
+    let watchId;
+
+    const startNativeTracking = async () => {
+      try {
+        // Native apps require explicit permission checks
+        const permissions = await Geolocation.checkPermissions();
+        if (permissions.location !== 'granted') {
+          await Geolocation.requestPermissions();
+        }
+
+        // Tap directly into the device's GPS chip
+        watchId = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 },
+          (position, err) => {
+            if (err) {
+              console.warn("Native GPS Error:", err);
+              return;
+            }
+            if (position) {
+              setLocation(
+                position.coords.latitude, 
+                position.coords.longitude, 
+                position.coords.accuracy
+              );
+            }
+          }
+        );
+      } catch (error) {
+        console.error("Geolocation init error:", error);
+      }
+    };
+
+    startNativeTracking();
+
+    // Cleanup the watcher when the app closes
+    return () => {
+      if (watchId) {
+        Geolocation.clearWatch({ id: watchId });
+      }
+    };
+  }, [setLocation]);
 
   useEffect(() => {
     if (!session?.user) return;

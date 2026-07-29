@@ -1,21 +1,26 @@
 import { create } from 'zustand';
 
 export const useGolfStore = create((set) => ({
-  // 1. Active Round State
   activeHole: 1,
-  players: [{ id: 'A', name: 'Me', hcp: 18 }],
-  isPlannerMode: false,
-  
-  // 2. GPS & Environmental Data
+  scores: {},
   currentLat: null,
   currentLng: null,
-  currentAltitude: null,
+  gpsAccuracy: null,
   windSpeed: 0,
   windDir: 0,
+  temperature: 15,
+  elevation: 0,
+  currentRoundId: null, // NEW: Tracks active round
 
-  // 3. Global Actions (Functions to update the state)
   setActiveHole: (hole) => set({ activeHole: hole }),
-  setPlannerMode: (isActive) => set({ isPlannerMode: isActive }),
-  setLocation: (lat, lng, alt) => set({ currentLat: lat, currentLng: lng, currentAltitude: alt }),
-  setWeather: (speed, dir) => set({ windSpeed: speed, windDir: dir }),
+  setScore: (hole, strokes, putts) => set((state) => ({
+    scores: { ...state.scores, [hole]: { strokes, putts } }
+  })),
+  setLocation: (lat, lng, accuracy) => set({ currentLat: lat, currentLng: lng, gpsAccuracy: accuracy }),
+  setWeather: (speed, dir, temp) => set({ windSpeed: speed, windDir: dir, temperature: temp }),
+  setElevation: (elev) => set({ elevation: elev }),
+  
+  // NEW: Round Management
+  setRoundId: (id) => set({ currentRoundId: id }),
+  clearRound: () => set({ currentRoundId: null, scores: {}, activeHole: 1 }),
 }));
