@@ -1,60 +1,61 @@
 import React from 'react';
-import { Wind, Mountain, Navigation, Volume2 } from 'lucide-react';
+import { Wind, TrendingUp, Compass } from 'lucide-react';
 
-export default function HeroDistanceCard({
-  distance = "--",
-  playsLike = "--",
-  windSpeed = 0,
-  windDir = 0,
-  elevation = 0,
-  recommendedClub = "Calculating...",
-}) {
+export default function HeroDistanceCard({ distance, playsLike, windSpeed, windDir, elevation, recommendedClub }) {
   return (
-    <div className="relative w-full rounded-2xl bg-slate-900/80 backdrop-blur-md border border-slate-700/50 p-5 text-white shadow-2xl z-10 mt-4">
-      {/* Top Bar: Environmental Stats */}
-      <div className="flex items-center justify-between border-b border-slate-700/60 pb-3 mb-4 text-xs font-semibold text-slate-300">
-        <div className="flex items-center gap-1.5">
-          <Wind className="w-4 h-4 text-sky-400" />
-          <span>{windSpeed} mph</span>
-          <Navigation 
-            className="w-3.5 h-3.5 text-sky-400 inline transition-transform duration-500" 
-            style={{ transform: `rotate(${windDir}deg)` }} 
-          />
-        </div>
-        
-        <div className="flex items-center gap-1.5">
-          <Mountain className="w-4 h-4 text-purple-400" />
-          <span>{elevation > 0 ? `+${elevation}` : elevation}y Elev</span>
-        </div>
-      </div>
-
-      {/* Main Yardage Display */}
-      <div className="flex items-center justify-between my-2">
+    <div className="mt-4 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-3xl p-5 shadow-xl text-white relative overflow-hidden">
+      
+      {/* Top Row: Distance & Plays Like */}
+      <div className="flex justify-between items-start">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">To Pin</p>
-          <div className="flex items-baseline gap-1">
-            <span className="text-6xl font-black tracking-tight text-white">{distance}</span>
-            <span className="text-lg font-bold text-emerald-400">YDS</span>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Direct Distance</p>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className="text-5xl font-black tracking-tight">{distance}</span>
+            <span className="text-xs font-bold text-slate-400">yds</span>
           </div>
         </div>
 
-        {/* Audio Caddy Button */}
-        <button className="w-14 h-14 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/20 transition-all">
-          <Volume2 className="w-6 h-6 stroke-[2.5]" />
-        </button>
+        <div className="text-right">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-400">Plays Like</p>
+          <div className="flex items-baseline justify-end gap-1 mt-0.5">
+            <span className="text-3xl font-black text-sky-300">{playsLike}</span>
+            <span className="text-xs font-bold text-sky-400">yds</span>
+          </div>
+        </div>
       </div>
 
-      {/* Bottom Bar: Plays Like & Caddy Rec */}
-      <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between">
-        <div>
-          <span className="text-xs text-slate-400 font-medium">Plays Like</span>
-          <p className="text-xl font-bold text-amber-400">{playsLike} Yds</p>
+      {/* Middle Row: Environment Specs */}
+      <div className="mt-5 grid grid-cols-3 gap-2 pt-4 border-t border-slate-800/80 text-center">
+        <div className="bg-slate-950/40 rounded-2xl p-2.5 border border-slate-800/50 flex flex-col items-center">
+          <Wind className="w-4 h-4 text-sky-400 mb-1" />
+          <span className="text-[10px] font-bold uppercase text-slate-400">Wind</span>
+          <span className="text-xs font-bold text-white mt-0.5">{windSpeed} mph</span>
         </div>
-        <div className="text-right">
-          <span className="text-xs text-slate-400 font-medium">Caddy Choice</span>
-          <p className="text-xl font-extrabold text-emerald-400">{recommendedClub}</p>
+
+        <div className="bg-slate-950/40 rounded-2xl p-2.5 border border-slate-800/50 flex flex-col items-center">
+          <TrendingUp className={`w-4 h-4 mb-1 ${elevation >= 0 ? 'text-amber-400' : 'text-emerald-400'}`} />
+          <span className="text-[10px] font-bold uppercase text-slate-400">Elevation</span>
+          <span className="text-xs font-bold text-white mt-0.5">{elevation > 0 ? `+${elevation}` : elevation} ft</span>
+        </div>
+
+        <div className="bg-slate-950/40 rounded-2xl p-2.5 border border-slate-800/50 flex flex-col items-center">
+          <Compass className="w-4 h-4 text-purple-400 mb-1" />
+          <span className="text-[10px] font-bold uppercase text-slate-400">Wind Dir</span>
+          <span className="text-xs font-bold text-white mt-0.5">{windDir}°</span>
         </div>
       </div>
+
+      {/* Bottom Banner: Recommended Club */}
+      <div className="mt-3 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 rounded-2xl p-3 flex items-center justify-between">
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-400">Smart Caddy Recommendation</p>
+          <p className="text-lg font-black text-white mt-0.5">{recommendedClub}</p>
+        </div>
+        <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-xs">
+          AI
+        </div>
+      </div>
+
     </div>
   );
 }
