@@ -14,7 +14,7 @@ import { useGolfStore } from './store/useGolfStore';
 import { calculateYardage } from './utils/distance';
 import { fetchLiveWeather, calculatePlaysLike, getRecommendedClub } from './utils/physics';
 import { castleDargan } from './data/castleDargan';
-import { Menu, History, Briefcase, Target, Book } from 'lucide-react';
+import { Menu, History, Briefcase, Target, Book, ClipboardList, X } from 'lucide-react';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -24,6 +24,7 @@ export default function App() {
   const [isFullScorecardOpen, setIsFullScorecardOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isBagOpen, setIsBagOpen] = useState(false);
+  const [isFabOpen, setIsFabOpen] = useState(false);
   const [isDispersionOpen, setIsDispersionOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
@@ -188,47 +189,47 @@ export default function App() {
         onCancelShot={() => setIsTracking(false)}
       />
 
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
+      {/* Floating Action Buttons (Collapsible Speed Dial) */}
+      <div className="fixed bottom-6 right-6 flex flex-col items-end gap-3 z-40">
         
-        {/* Notes & Rules Button */}
-        <button
-          onClick={() => setIsNotesOpen(true)}
-          className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-purple-400 hover:bg-slate-700 active:scale-95 transition-all"
+        {/* Secondary Buttons (Visible only when isFabOpen is true) */}
+        <div 
+          className={`flex flex-col items-end gap-3 transition-all duration-300 origin-bottom ${
+            isFabOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-50 opacity-0 translate-y-10 pointer-events-none'
+          }`}
         >
-          <Book className="w-5 h-5" />
-        </button>
+          {/* Notes & Rules Button */}
+          <button onClick={() => { setIsNotesOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-purple-400 hover:bg-slate-700 active:scale-95 transition-all">
+            <Book className="w-5 h-5" />
+          </button>
 
-        {/* Dispersion Target Button */}
-        <button
-          onClick={() => setIsDispersionOpen(true)}
-          className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-rose-400 hover:bg-slate-700 active:scale-95 transition-all"
-        >
-          <Target className="w-5 h-5" />
-        </button>
+          {/* Dispersion Target Button */}
+          <button onClick={() => { setIsDispersionOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-rose-400 hover:bg-slate-700 active:scale-95 transition-all">
+            <Target className="w-5 h-5" />
+          </button>
 
-        {/* Bag Manager Button */}
-        <button
-          onClick={() => setIsBagOpen(true)}
-          className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-amber-400 hover:bg-slate-700 active:scale-95 transition-all"
-        >
-          <Briefcase className="w-5 h-5" />
-        </button>
+          {/* Bag Manager Button */}
+          <button onClick={() => { setIsBagOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-amber-400 hover:bg-slate-700 active:scale-95 transition-all">
+            <Briefcase className="w-5 h-5" />
+          </button>
 
-        {/* History Button */}
-        <button
-          onClick={() => setIsHistoryOpen(true)}
-          className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-sky-400 hover:bg-slate-700 active:scale-95 transition-all"
-        >
-          <History className="w-5 h-5" />
-        </button>
+          {/* History Button */}
+          <button onClick={() => { setIsHistoryOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-sky-400 hover:bg-slate-700 active:scale-95 transition-all">
+            <History className="w-5 h-5" />
+          </button>
 
-        {/* Scorecard Button */}
+          {/* Scorecard Button */}
+          <button onClick={() => { setIsFullScorecardOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-emerald-500 border border-emerald-400 rounded-full shadow-xl flex items-center justify-center text-slate-950 hover:bg-emerald-400 active:scale-95 transition-all">
+            <ClipboardList className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Main Menu Toggle Button */}
         <button
-          onClick={() => setIsFullScorecardOpen(true)}
-          className="w-14 h-14 bg-emerald-500 text-slate-950 rounded-full shadow-2xl flex items-center justify-center hover:bg-emerald-400 active:scale-95 transition-all"
+          onClick={() => setIsFabOpen(!isFabOpen)}
+          className="w-14 h-14 bg-emerald-500 text-slate-950 rounded-full shadow-2xl flex items-center justify-center hover:bg-emerald-400 active:scale-95 transition-all z-50"
         >
-          <Menu className="w-6 h-6 stroke-[2.5]" />
+          {isFabOpen ? <X className="w-6 h-6 stroke-[2.5]" /> : <Menu className="w-6 h-6 stroke-[2.5]" />}
         </button>
       </div>
 
