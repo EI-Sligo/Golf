@@ -8,10 +8,13 @@ import ScoreEntryModal from './components/ScoreEntryModal';
 import FullScorecard from './components/FullScorecard';
 import RoundHistory from './components/RoundHistory';
 import ClubBagManager from './components/ClubBagManager';
+import DispersionAnalytics from './components/DispersionAnalytics';
+import SwingThoughtsRules from './components/SwingThoughtsRules';
 import { useGolfStore } from './store/useGolfStore';
 import { calculateYardage } from './utils/distance';
 import { fetchLiveWeather, calculatePlaysLike, getRecommendedClub } from './utils/physics';
-import { Menu, History, Briefcase } from 'lucide-react';
+import { castleDargan } from './data/castleDargan';
+import { Menu, History, Briefcase, Target, Book } from 'lucide-react';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -21,6 +24,8 @@ export default function App() {
   const [isFullScorecardOpen, setIsFullScorecardOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isBagOpen, setIsBagOpen] = useState(false);
+  const [isDispersionOpen, setIsDispersionOpen] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [pendingDistance, setPendingDistance] = useState(0);
 
@@ -34,7 +39,9 @@ export default function App() {
     windSpeed, windDir, temperature, setWeather, elevation 
   } = useGolfStore();
 
-  const pinLocation = [54.198594, -8.430418]; 
+  // Dynamic Course Data
+  const currentHoleData = castleDargan[activeHole - 1];
+  const pinLocation = [currentHoleData.lat, currentHoleData.lng]; 
 
   // 1. Auth Listener
   useEffect(() => {
@@ -56,7 +63,7 @@ export default function App() {
       if (!error && data) setBagClubs(data);
     };
     fetchBag();
-  }, [session, isBagOpen]); // Re-fetch when bag modal closes
+  }, [session, isBagOpen]);
 
   // 3. Hardware GPS Tracker
   useEffect(() => {
@@ -112,8 +119,8 @@ export default function App() {
       alert(`Shot saved successfully! (${shotData.club})`);
       setIsTracking(false);
     } catch (error) {
-      alert("Failed to save shot.");
-      console.error(error);
+      alert("Database Error: " + error.message);
+      console.error("Full Error:", JSON.stringify(error, null, 2));
     }
   };
 
@@ -135,9 +142,12 @@ export default function App() {
         
         <div className="text-center flex flex-col items-center">
           <h1 className="text-xl font-black text-white">Hole {activeHole}</h1>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">
+            Par {currentHoleData.par} <span className="text-slate-600 mx-1">•</span> Index {currentHoleData.index}
+          </p>
           <button 
             onClick={() => setIsScoreModalOpen(true)}
-            className={`mt-1 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-colors ${
+            className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-colors ${
               currentScore ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
             }`}
           >
@@ -180,6 +190,23 @@ export default function App() {
 
       {/* Floating Action Buttons */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
+        
+        {/* Notes & Rules Button */}
+        <button
+          onClick={() => setIsNotesOpen(true)}
+          className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-purple-400 hover:bg-slate-700 active:scale-95 transition-all"
+        >
+          <Book className="w-5 h-5" />
+        </button>
+
+        {/* Dispersion Target Button */}
+        <button
+          onClick={() => setIsDispersionOpen(true)}
+          className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-rose-400 hover:bg-slate-700 active:scale-95 transition-all"
+        >
+          <Target className="w-5 h-5" />
+        </button>
+
         {/* Bag Manager Button */}
         <button
           onClick={() => setIsBagOpen(true)}
@@ -206,25 +233,12 @@ export default function App() {
       </div>
 
       {/* Modals & Views */}
-      <ScoreEntryModal 
-        isOpen={isScoreModalOpen} 
-        onClose={() => setIsScoreModalOpen(false)} 
-      />
-      
-      <FullScorecard 
-        isOpen={isFullScorecardOpen}
-        onClose={() => setIsFullScorecardOpen(false)}
-      />
-
-      <RoundHistory 
-        isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
-      />
-
-      <ClubBagManager 
-        isOpen={isBagOpen}
-        onClose={() => setIsBagOpen(false)}
-      />
+      <ScoreEntryModal isOpen={isScoreModalOpen} onClose={() => setIsScoreModalOpen(false)} />
+      <FullScorecard isOpen={isFullScorecardOpen} onClose={() => setIsFullScorecardOpen(false)} />
+      <RoundHistory isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
+      <ClubBagManager isOpen={isBagOpen} onClose={() => setIsBagOpen(false)} />
+      <DispersionAnalytics isOpen={isDispersionOpen} onClose={() => setIsDispersionOpen(false)} />
+      <SwingThoughtsRules isOpen={isNotesOpen} onClose={() => setIsNotesOpen(false)} />
     </div>
   );
 }
