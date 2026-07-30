@@ -1,100 +1,86 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { X, Calendar, Trophy, ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { useGolfStore } from '../store/useGolfStore';
 
-export default function RoundHistory({ isOpen, onClose }) {
-  const [rounds, setRounds] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function RoundHistory() {
+  const { rounds, deleteRound } = useGolfStore();
+  const [selectedRound, setSelectedRound] = useState(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchRounds();
-    }
-  }, [isOpen]);
-
-  const fetchRounds = async () => {
-    setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Fetch saved rounds from the database, newest first
-      const { data, error } = await supabase
-        .from('rounds')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setRounds(data || []);
-    } catch (error) {
-      console.error("Error fetching round history:", error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[80] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-full duration-300">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900">
-        <div>
-          <h2 className="text-xl font-black text-white">Round History</h2>
-          <p className="text-sky-400 font-bold text-xs uppercase tracking-wider">Castle Dargan Archive</p>
+  if (selectedRound) {
+    return (
+      <div className="bg-slate-800 p-5 rounded-2xl shadow-lg border border-slate-700">
+        <button onClick={() => setSelectedRound(null)} className="text-emerald-400 text-sm font-bold mb-4 hover:text-emerald-300 transition-colors">← Back to Rounds</button>
+        <h2 className="text-2xl font-bold text-white">{selectedRound.course_name}</h2>
+        <p className="text-slate-400 mb-6">{new Date(selectedRound.created_at).toLocaleDateString()}</p>
+        
+        <div className="bg-slate-900 p-6 rounded-xl text-center border border-slate-700">
+          <p className="text-slate-400 uppercase tracking-widest text-sm font-bold mb-2">Total Score</p>
+          <p className="text-5xl font-black text-emerald-400">{selectedRound.total_score}</p>
         </div>
-        <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
-        {loading ? (
-          <div className="text-center py-12 text-slate-500 text-sm font-medium">Loading history...</div>
-        ) : rounds.length === 0 ? (
-          <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-8 text-center">
-            <p className="text-slate-400 font-semibold text-sm">No saved rounds found.</p>
-            <p className="text-xs text-slate-500 mt-1">Finish an official round from your scorecard to log it here!</p>
+        {/* Detailed Hole-by-Hole Scorecard */}
+        {selectedRound.scorecard && Object.keys(selectedRound.scorecard).length > 0 ? (
+          <div className="mt-6 space-y-2">
+            <h3 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-sm">Hole-by-Hole</h3>
+            <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-800 text-slate-400">
+                  <tr>
+                    <th className="p-3">Hole</th>
+                    <th className="p-3 text-center">Score</th>
+                    <th className="p-3 text-center">Putts</th>
+                    <th className="p-3 text-right">Accuracy</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700">
+                  {Object.entries(selectedRound.scorecard).map(([hole, data]) => (
+                    <tr key={hole}>
+                      <td className="p-3 font-bold text-white">{hole}</td>
+                      <td className="p-3 text-center font-bold text-emerald-400">{data.strokes || '-'}</td>
+                      <td className="p-3 text-center text-slate-300">{data.putts !== undefined ? data.putts : '-'}</td>
+                      <td className="p-3 text-right text-slate-300 text-[10px] uppercase font-bold tracking-wide">{data.fairway || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
-          rounds.map((round) => {
-            const dateStr = new Date(round.created_at).toLocaleDateString('en-IE', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric'
-            });
-
-            const toParVal = round.to_par;
-            const parDisplay = toParVal > 0 ? `+${toParVal}` : toParVal === 0 ? 'E' : toParVal;
-
-            return (
-              <div key={round.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-md flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 font-bold">
-                    <Trophy className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-bold text-sm">{round.course_name || 'Castle Dargan'}</h3>
-                    <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                      <Calendar className="w-3 h-3 text-slate-500" /> {dateStr}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-lg font-black text-white">{round.total_score || '--'}</p>
-                  <p className={`text-xs font-bold ${toParVal > 0 ? 'text-rose-400' : toParVal < 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
-                    {toParVal !== null ? parDisplay : '--'}
-                  </p>
-                </div>
-              </div>
-            );
-          })
+          <p className="text-slate-500 text-sm mt-6 text-center italic">No hole-by-hole data saved for this round.</p>
         )}
       </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-800 p-5 rounded-2xl shadow-lg border border-slate-700">
+      <h2 className="text-xl font-bold text-emerald-400 mb-6">Round History</h2>
+
+      {rounds.length === 0 ? (
+        <p className="text-center text-slate-400 py-10">No rounds played yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {rounds.map((round) => (
+            <div key={round.id} className="bg-slate-900 p-4 rounded-xl border border-slate-700 flex justify-between items-center cursor-pointer hover:bg-slate-800 transition-colors" onClick={() => setSelectedRound(round)}>
+              <div>
+                <p className="font-bold text-white text-lg">{round.course_name}</p>
+                <p className="text-xs text-slate-400">{new Date(round.created_at).toLocaleDateString()}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">Score</p>
+                  <p className="text-emerald-400 font-black text-xl">{round.total_score || '--'}</p>
+                </div>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); deleteRound(round.id); }} 
+                  className="text-red-400 hover:text-red-300 font-bold text-xl px-2"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

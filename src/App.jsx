@@ -1,64 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
+import { useGolfStore } from './store/useGolfStore';
+
+// Components
 import Auth from './components/Auth';
 import HeroDistanceCard from './components/HeroDistanceCard';
 import GolfMap from './components/GolfMap';
-import ShotTrackerDrawer from './components/ShotTrackerDrawer';
-import ScoreEntryModal from './components/ScoreEntryModal';
-import FullScorecard from './components/FullScorecard';
-import RoundHistory from './components/RoundHistory';
 import ClubBagManager from './components/ClubBagManager';
+import FullScorecard from './components/FullScorecard';
 import DispersionAnalytics from './components/DispersionAnalytics';
+import RoundHistory from './components/RoundHistory';
 import SwingThoughtsRules from './components/SwingThoughtsRules';
-import { useGolfStore } from './store/useGolfStore';
-import { calculateYardage } from './utils/distance';
-import { fetchLiveWeather, calculatePlaysLike, getRecommendedClub } from './utils/physics';
-import { castleDargan } from './data/castleDargan';
-import { Menu, History, Briefcase, Target, Book, ClipboardList, X, PlayCircle } from 'lucide-react';
-import { Geolocation } from '@capacitor/geolocation';
+import ScoreEntryModal from './components/ScoreEntryModal';
+import ShotTrackerDrawer from './components/ShotTrackerDrawer';
 
-export default function App() {
-  const [session, setSession] = useState(null);
+function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('play');
   
-  const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
-  const [isFullScorecardOpen, setIsFullScorecardOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isBagOpen, setIsBagOpen] = useState(false);
-  const [isDispersionOpen, setIsDispersionOpen] = useState(false);
-  const [isNotesOpen, setIsNotesOpen] = useState(false);
-  const [isTracking, setIsTracking] = useState(false);
-  const [isFabOpen, setIsFabOpen] = useState(false);
+  // State for the Course Selector
+  const [newRoundCourse, setNewRoundCourse] = useState('Castle Dargan');
+  const [customCourseName, setCustomCourseName] = useState('');
+  
+  // Reactively pull the currentRoundId so the UI updates instantly!
+  const currentRoundId = useGolfStore((state) => state.currentRoundId);
+  const setLocation = useGolfStore((state) => state.setLocation);
 
-  const [bagClubs, setBagClubs] = useState([]);
+  // 1. Supabase Authentication Listener
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        useGolfStore.getState().fetchInitialData(currentUser.id);
+      }
+      setLoading(false);
+    });
 
-  const { 
-    activeHole, setActiveHole, scores, 
-    currentLat, currentLng, setLocation,
-    windSpeed, windDir, temperature, setWeather, elevation,
-    currentRoundId, setRoundId, clearRound
-  } = useGolfStore();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        useGolfStore.getState().fetchInitialData(currentUser.id);
+      } else {
+        useGolfStore.setState({ clubs: [], rounds: [], activeRound: null }); 
+      }
+      setLoading(false);
+    });
 
-  const currentHoleData = castleDargan[activeHole - 1];
-  const pinLocation = [currentHoleData.lat, currentHoleData.lng]; 
+    return () => subscription.unsubscribe();
+  }, []);
 
-  // 3. Native Hardware GPS Tracker (Capacitor)
+  // 2. Native Hardware GPS Tracker
   useEffect(() => {
     let watchId;
 
     const startNativeTracking = async () => {
       try {
-        // Native apps require explicit permission checks
-        const permissions = await Geolocation.checkPermissions();
-        if (permissions.location !== 'granted') {
-          await Geolocation.requestPermissions();
+        if (Capacitor.isNativePlatform()) {
+          const permissions = await Geolocation.checkPermissions();
+          if (permissions.location !== 'granted') {
+            await Geolocation.requestPermissions();
+          }
         }
 
-        // Tap directly into the device's GPS chip
         watchId = await Geolocation.watchPosition(
           { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 },
           (position, err) => {
             if (err) {
-              console.warn("Native GPS Error:", err);
+              console.warn("GPS Error:", err);
               return;
             }
             if (position) {
@@ -75,208 +88,167 @@ export default function App() {
       }
     };
 
-    startNativeTracking();
+    if (user) {
+      startNativeTracking();
+    }
 
-    // Cleanup the watcher when the app closes
     return () => {
       if (watchId) {
         Geolocation.clearWatch({ id: watchId });
       }
     };
-  }, [setLocation]);
+  }, [user, setLocation]);
 
-  useEffect(() => {
-    if (!session?.user) return;
-    const fetchBag = async () => {
-      const { data, error } = await supabase
-        .from('bag_clubs')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('yardage', { ascending: false });
-      if (!error && data) setBagClubs(data);
-    };
-    fetchBag();
-  }, [session, isBagOpen]);
+  // 3. Tab Router
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'play':
+        // Show Start Round UI if no round is active (now fully reactive!)
+        if (!currentRoundId) {
+          return (
+            <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
+              <h2 className="text-2xl font-bold text-emerald-400 mb-2 text-center">Ready to Golf?</h2>
+              <p className="text-slate-400 text-center mb-6 text-sm">Start a round to enable GPS tracking and shot logging.</p>
+              
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const finalCourseName = newRoundCourse === 'Other' ? customCourseName : newRoundCourse;
+                if (!finalCourseName) return;
 
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => setLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
-      (err) => console.warn("GPS Error:", err),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [setLocation]);
+                const { data: { user } } = await supabase.auth.getUser();
+                const { data } = await supabase.from('rounds').insert([{ user_id: user.id, course_name: finalCourseName }]).select();
+                
+                if (data) {
+                  useGolfStore.getState().setRoundId(data[0].id);
+                  useGolfStore.setState(state => ({ rounds: [data[0], ...state.rounds] }));
+                }
+              }} className="space-y-4">
+                
+                {/* Course Dropdown */}
+                <select 
+                  value={newRoundCourse} 
+                  onChange={(e) => setNewRoundCourse(e.target.value)}
+                  className="w-full bg-slate-900 p-4 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none appearance-none"
+                >
+                  <option value="Castle Dargan">Castle Dargan Golf Club</option>
+                  <option value="Other">Other Course...</option>
+                </select>
 
-  useEffect(() => {
-    if (currentLat && currentLng) {
-      fetchLiveWeather(currentLat, currentLng).then(weather => {
-        if (weather) {
-          const speedMph = Math.round(weather.windspeed / 1.609);
-          setWeather(speedMph, weather.winddirection, weather.temperature);
+                {/* Custom Entry if 'Other' is selected */}
+                {newRoundCourse === 'Other' && (
+                  <input 
+                    type="text" 
+                    placeholder="Enter Course Name" 
+                    required 
+                    value={customCourseName}
+                    onChange={(e) => setCustomCourseName(e.target.value)}
+                    className="w-full bg-slate-900 p-4 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none" 
+                  />
+                )}
+
+                <button type="submit" className="w-full bg-emerald-500 text-slate-900 font-bold py-4 rounded-xl hover:bg-emerald-400 transition-colors">
+                  Tee Off
+                </button>
+              </form>
+            </div>
+          );
         }
-      });
-    }
-  }, [currentLat, currentLng, setWeather]);
-
-  const distanceToPin = currentLat && currentLng 
-    ? calculateYardage(currentLat, currentLng, pinLocation[0], pinLocation[1])
-    : "--";
-
-  const truePlaysLike = calculatePlaysLike(
-    distanceToPin, currentLat, currentLng, pinLocation[0], pinLocation[1], 
-    windSpeed, windDir, temperature, elevation
-  );
-
-  const recommendedClub = getRecommendedClub(truePlaysLike, bagClubs);
-
-  const handleStartRound = async () => {
-    if (!session?.user) return;
-    try {
-      const { data, error } = await supabase.from('rounds').insert([{
-        user_id: session.user.id,
-        course_name: 'Castle Dargan'
-      }]).select().single();
-      
-      if (error) throw error;
-      setRoundId(data.id);
-    } catch (err) {
-      alert("Failed to start round: " + err.message);
-    }
-  };
-
-  const handleSaveShot = async (shotData) => {
-    if (!session?.user) return;
-    try {
-      const { error } = await supabase.from('shots').insert([{
-        user_id: session.user.id,
-        round_id: currentRoundId, // Will be null if practice shot, which is now allowed
-        hole_number: activeHole,
-        club: shotData.club,
-        distance: shotData.distance,
-        accuracy: shotData.accuracy,
-      }]);
-      if (error) throw error;
-      alert(`Shot saved successfully! (${shotData.distance}yds with ${shotData.club})`);
-      setIsTracking(false);
-    } catch (error) {
-      alert("Database Error: " + error.message);
-      console.error("Full Error:", JSON.stringify(error, null, 2));
+        
+        // If round is active, show the Map and Tracker
+        return (
+          <div className="space-y-6">
+            <HeroDistanceCard />
+            <GolfMap />
+            <ShotTrackerDrawer />
+            <FullScorecard />
+          </div>
+        );
+      case 'bag':
+        return (
+          <div className="space-y-6">
+            <ClubBagManager />
+            <DispersionAnalytics />
+          </div>
+        );
+      case 'history':
+        return (
+          <div className="space-y-6">
+            <RoundHistory />
+          </div>
+        );
+      case 'guides':
+        return (
+          <div className="space-y-6">
+            <SwingThoughtsRules />
+          </div>
+        );
+      default:
+        return null;
     }
   };
 
-  if (!session) return <Auth />;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white">
+        <div className="animate-pulse">Loading Golf Caddy...</div>
+      </div>
+    );
+  }
 
-  const currentScore = scores[activeHole];
+  if (!user) {
+    return <Auth />;
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 font-sans max-w-md mx-auto pb-12 relative">
-      
+    <div className="min-h-screen bg-slate-900 text-white pb-20">
       {/* Header */}
-      <header className="mb-4 bg-slate-900/60 p-3 rounded-2xl border border-slate-800 shadow-sm">
-        {!currentRoundId ? (
-          <div className="flex flex-col items-center justify-center py-2">
-            <p className="text-slate-400 text-xs font-bold mb-2">Ready to play Castle Dargan?</p>
-            <button onClick={handleStartRound} className="flex items-center gap-2 bg-emerald-500 text-slate-950 px-6 py-2 rounded-full font-black text-sm hover:bg-emerald-400 transition-colors">
-              <PlayCircle className="w-4 h-4" /> Start Official Round
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between">
-            <button 
-              onClick={() => setActiveHole(Math.max(1, activeHole - 1))} 
-              className="px-3 py-1.5 rounded-xl bg-slate-800 text-xs font-bold text-slate-300 active:scale-95 transition-all"
-            >
-              &larr; Prev
-            </button>
-            
-            <div className="text-center flex flex-col items-center">
-              <h1 className="text-xl font-black text-white">Hole {activeHole}</h1>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-                Par {currentHoleData.par} <span className="text-slate-600 mx-1">•</span> Index {currentHoleData.index}
-              </p>
-              <button 
-                onClick={() => setIsScoreModalOpen(true)}
-                className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-colors ${
-                  currentScore ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                }`}
-              >
-                {currentScore ? `Score: ${currentScore.strokes}` : 'Enter Score'}
-              </button>
-            </div>
-
-            <button 
-              onClick={() => setActiveHole(Math.min(18, activeHole + 1))} 
-              className="px-3 py-1.5 rounded-xl bg-slate-800 text-xs font-bold text-slate-300 active:scale-95 transition-all"
-            >
-              Next &rarr;
-            </button>
-          </div>
-        )}
+      <header className="p-4 bg-slate-800 shadow-md flex justify-between items-center sticky top-0 z-40">
+        <h1 className="text-xl font-bold text-emerald-400">Golf Caddy</h1>
+        <button 
+          onClick={() => supabase.auth.signOut()} 
+          className="text-sm font-semibold text-slate-300 hover:text-white bg-slate-700 px-3 py-1 rounded transition-colors"
+        >
+          Sign Out
+        </button>
       </header>
 
-      {/* Map */}
-      <GolfMap userLocation={currentLat ? [currentLat, currentLng] : null} pinLocation={pinLocation} />
+      {/* Main Content Area */}
+      <main className="max-w-md mx-auto p-4">
+        {renderTabContent()}
+      </main>
 
-      {/* Dashboard */}
-      <HeroDistanceCard 
-        distance={distanceToPin} 
-        playsLike={truePlaysLike} 
-        windSpeed={windSpeed}
-        windDir={windDir} 
-        elevation={elevation} 
-        recommendedClub={recommendedClub}
-      />
+      {/* Modals & Overlays */}
+      <ScoreEntryModal />
 
-      <div className="mt-4">
+      {/* Bottom Mobile Navigation */}
+      <nav className="fixed bottom-0 w-full bg-slate-800 border-t border-slate-700 flex justify-around z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
         <button 
-          onClick={() => setIsTracking(true)}
-          className="w-full py-4 bg-sky-500/10 border border-sky-500/30 text-sky-400 font-black rounded-2xl text-lg flex items-center justify-center gap-2 hover:bg-sky-500/20 transition-colors"
+          onClick={() => setActiveTab('play')} 
+          className={`flex-1 py-4 text-center transition-colors ${activeTab === 'play' ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
         >
-          <Target className="w-5 h-5" />
-          Track GPS Shot
+          <span className="text-sm font-bold">⛳ Play</span>
         </button>
-      </div>
-
-      {/* Shot Tracker */}
-      <ShotTrackerDrawer 
-        isTracking={isTracking} 
-        onStartShot={() => setIsTracking(true)} 
-        onSaveShot={handleSaveShot} 
-        onCancelShot={() => setIsTracking(false)}
-      />
-
-      {/* Floating Action Buttons (Collapsible Speed Dial) */}
-      <div className="fixed bottom-6 right-6 flex flex-col items-end gap-3 z-40">
-        <div className={`flex flex-col items-end gap-3 transition-all duration-300 origin-bottom ${isFabOpen ? 'scale-100 opacity-100 translate-y-0' : 'scale-50 opacity-0 translate-y-10 pointer-events-none'}`}>
-          <button onClick={() => { setIsNotesOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-purple-400 hover:bg-slate-700 active:scale-95 transition-all">
-            <Book className="w-5 h-5" />
-          </button>
-          <button onClick={() => { setIsDispersionOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-rose-400 hover:bg-slate-700 active:scale-95 transition-all">
-            <Target className="w-5 h-5" />
-          </button>
-          <button onClick={() => { setIsBagOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-amber-400 hover:bg-slate-700 active:scale-95 transition-all">
-            <Briefcase className="w-5 h-5" />
-          </button>
-          <button onClick={() => { setIsHistoryOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-full shadow-xl flex items-center justify-center text-sky-400 hover:bg-slate-700 active:scale-95 transition-all">
-            <History className="w-5 h-5" />
-          </button>
-          <button onClick={() => { setIsFullScorecardOpen(true); setIsFabOpen(false); }} className="w-12 h-12 bg-emerald-500 border border-emerald-400 rounded-full shadow-xl flex items-center justify-center text-slate-950 hover:bg-emerald-400 active:scale-95 transition-all">
-            <ClipboardList className="w-5 h-5" />
-          </button>
-        </div>
-        <button onClick={() => setIsFabOpen(!isFabOpen)} className="w-14 h-14 bg-emerald-500 text-slate-950 rounded-full shadow-2xl flex items-center justify-center hover:bg-emerald-400 active:scale-95 transition-all z-50">
-          {isFabOpen ? <X className="w-6 h-6 stroke-[2.5]" /> : <Menu className="w-6 h-6 stroke-[2.5]" />}
+        <button 
+          onClick={() => setActiveTab('bag')} 
+          className={`flex-1 py-4 text-center transition-colors ${activeTab === 'bag' ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <span className="text-sm font-bold">🎒 Bag</span>
         </button>
-      </div>
-
-      {/* Modals & Views */}
-      <ScoreEntryModal isOpen={isScoreModalOpen} onClose={() => setIsScoreModalOpen(false)} />
-      <FullScorecard isOpen={isFullScorecardOpen} onClose={() => setIsFullScorecardOpen(false)} />
-      <RoundHistory isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
-      <ClubBagManager isOpen={isBagOpen} onClose={() => setIsBagOpen(false)} />
-      <DispersionAnalytics isOpen={isDispersionOpen} onClose={() => setIsDispersionOpen(false)} />
-      <SwingThoughtsRules isOpen={isNotesOpen} onClose={() => setIsNotesOpen(false)} />
+        <button 
+          onClick={() => setActiveTab('history')} 
+          className={`flex-1 py-4 text-center transition-colors ${activeTab === 'history' ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <span className="text-sm font-bold">📊 Stats</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('guides')} 
+          className={`flex-1 py-4 text-center transition-colors ${activeTab === 'guides' ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <span className="text-sm font-bold">🏌️ Rules</span>
+        </button>
+      </nav>
     </div>
   );
 }
+
+export default App;

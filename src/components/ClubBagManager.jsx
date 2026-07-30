@@ -1,121 +1,95 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { X, Plus, Trash2, ShieldCheck } from 'lucide-react';
+import { useGolfStore } from '../store/useGolfStore';
 
-export default function ClubBagManager({ isOpen, onClose }) {
-  const [clubs, setClubs] = useState([]);
-  const [newClubName, setNewClubName] = useState('');
-  const [newYardage, setNewYardage] = useState('');
-  const [loading, setLoading] = useState(false);
+const COMMON_CLUBS = [
+  "Driver", "3 Wood", "5 Wood", "7 Wood", 
+  "2 Hybrid", "3 Hybrid", "4 Hybrid", "5 Hybrid", "6 Hybrid",
+  "3 Iron", "4 Iron", "5 Iron", "6 Iron", "7 Iron", "8 Iron", "9 Iron", 
+  "Pitching Wedge (PW)", "Gap Wedge (GW)", "Sand Wedge (SW)", "Lob Wedge (LW)", 
+  "46° Wedge", "48° Wedge", "50° Wedge", "52° Wedge", "54° Wedge", "56° Wedge", "58° Wedge", "60° Wedge", "64° Wedge",
+  "Putter"
+];
 
-  useEffect(() => {
-    if (isOpen) fetchBag();
-  }, [isOpen]);
-
-  const fetchBag = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('bag_clubs')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('yardage', { ascending: false });
-
-    if (!error) setClubs(data || []);
-  };
+export default function ClubBagManager() {
+  const { clubs, shots, deleteClub } = useGolfStore();
+  const [isAdding, setIsAdding] = useState(false);
+  const [newClub, setNewClub] = useState({ name: '', loft: '', avg_distance: '' });
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAddClub = async (e) => {
     e.preventDefault();
-    if (!newClubName || !newYardage) return;
-
-    setLoading(true);
+    setIsSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
-    
-    const { error } = await supabase.from('bag_clubs').insert([{
-      user_id: user.id,
-      club_name: newClubName,
-      yardage: parseInt(newYardage)
-    }]);
 
-    if (!error) {
-      setNewClubName('');
-      setNewYardage('');
-      fetchBag();
-    } else {
-      alert("Error adding club");
+    const { data, error } = await supabase.from('clubs').insert([{ 
+      user_id: user.id, name: newClub.name, loft: Number(newClub.loft) || null, avg_distance: Number(newClub.avg_distance) || 0 
+    }]).select();
+
+    if (!error && data) {
+      useGolfStore.setState((state) => ({ clubs: [...state.clubs, data[0]].sort((a, b) => b.avg_distance - a.avg_distance) }));
+      setIsAdding(false);
+      setNewClub({ name: '', loft: '', avg_distance: '' });
     }
-    setLoading(false);
+    setIsSaving(false);
   };
-
-  const handleDeleteClub = async (id) => {
-    const { error } = await supabase.from('bag_clubs').delete().eq('id', id);
-    if (!error) fetchBag();
-  };
-
-  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-full duration-300">
-      <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900">
-        <div>
-          <h2 className="text-xl font-black text-white">My Club Bag</h2>
-          <p className="text-emerald-400 font-bold text-xs uppercase tracking-wider">Yardage Matrix</p>
-        </div>
-        <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
-          <X className="w-5 h-5" />
+    <div className="bg-slate-800 p-5 rounded-2xl shadow-lg border border-slate-700">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-emerald-400">My Bag</h2>
+        <button onClick={() => setIsAdding(!isAdding)} className="bg-emerald-500 text-slate-900 px-4 py-2 rounded-lg font-bold text-sm hover:bg-emerald-400 transition-colors">
+          {isAdding ? 'Cancel' : '+ Add Club'}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
-        
-        {/* Add Club Form */}
-        <form onSubmit={handleAddClub} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
-          <p className="text-xs font-bold uppercase text-slate-400">Add / Update Club</p>
-          <div className="flex gap-2">
-            <input 
-              type="text" 
-              placeholder="Club (e.g. 7 Iron)" 
-              value={newClubName}
-              onChange={(e) => setNewClubName(e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-emerald-500 focus:outline-none"
-            />
-            <input 
-              type="number" 
-              placeholder="Yards" 
-              value={newYardage}
-              onChange={(e) => setNewYardage(e.target.value)}
-              className="w-24 bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all flex items-center justify-center gap-2"
+      {isAdding && (
+        <form onSubmit={handleAddClub} className="mb-6 bg-slate-900 p-4 rounded-xl border border-slate-700 space-y-4">
+          <select 
+            required className="w-full bg-slate-800 p-3 rounded-lg text-white border border-slate-600 focus:border-emerald-500 focus:outline-none"
+            value={newClub.name} onChange={e => setNewClub({...newClub, name: e.target.value})}
           >
-            <Plus className="w-4 h-4 stroke-[3]" /> Add to Bag
+            <option value="" disabled>Select a club...</option>
+            {COMMON_CLUBS.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <div className="flex gap-3">
+            <input type="number" placeholder="Loft (°)" className="w-1/2 bg-slate-800 p-3 rounded-lg text-white border border-slate-600 focus:outline-none focus:border-emerald-500" value={newClub.loft} onChange={e => setNewClub({...newClub, loft: e.target.value})} />
+            <input type="number" placeholder="Stock Yds" required className="w-1/2 bg-slate-800 p-3 rounded-lg text-white border border-slate-600 focus:outline-none focus:border-emerald-500" value={newClub.avg_distance} onChange={e => setNewClub({...newClub, avg_distance: e.target.value})} />
+          </div>
+          <button type="submit" disabled={isSaving || !newClub.name} className="w-full bg-emerald-500 text-slate-900 font-bold py-3 rounded-lg mt-2 disabled:opacity-50 hover:bg-emerald-400 transition-colors">
+            {isSaving ? 'Saving...' : 'Save Club to Bag'}
           </button>
         </form>
+      )}
 
-        {/* Club List */}
-        <div className="space-y-2">
-          {clubs.length === 0 ? (
-            <div className="text-center py-8 text-slate-500 text-sm">No clubs added to your bag yet.</div>
-          ) : (
-            clubs.map((club) => (
-              <div key={club.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between shadow-sm">
-                <span className="font-bold text-white text-base">{club.club_name}</span>
-                <div className="flex items-center gap-4">
-                  <span className="text-emerald-400 font-black text-lg">{club.yardage} <span className="text-xs font-normal text-slate-400">YDS</span></span>
-                  <button onClick={() => handleDeleteClub(club.id)} className="text-slate-500 hover:text-rose-400 p-1">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+      <div className="space-y-3">
+        {clubs.length === 0 && !isAdding && <p className="text-slate-400 text-center py-6">Your bag is empty.</p>}
+        {clubs.map((club) => {
+          const clubShots = shots.filter(s => s.club_id === club.id);
+          const activeAvg = clubShots.length > 0 
+            ? Math.round(clubShots.reduce((acc, curr) => acc + curr.distance, 0) / clubShots.length) 
+            : club.avg_distance;
+
+          const lefts = clubShots.filter(s => s.offline_yards < 0).length;
+          const rights = clubShots.filter(s => s.offline_yards > 0).length;
+          const dispersion = clubShots.length === 0 ? "No tracked shots" : (lefts > rights ? "Misses Left" : rights > lefts ? "Misses Right" : "Straight");
+
+          return (
+            <div key={club.id} className="flex justify-between items-center bg-slate-900 p-4 rounded-xl border border-slate-700">
+              <div>
+                <p className="font-bold text-white text-lg">{club.name}</p>
+                <p className="text-xs text-slate-400">Stock: {club.avg_distance}y | {dispersion}</p>
               </div>
-            ))
-          )}
-        </div>
-
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-emerald-400 font-black text-xl">{activeAvg}</p>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">Tracked Yds</p>
+                </div>
+                <button onClick={() => deleteClub(club.id)} className="text-red-400 hover:text-red-300 font-bold text-xl px-2">×</button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

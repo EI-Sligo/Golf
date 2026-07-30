@@ -1,122 +1,116 @@
-import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, Save, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { useGolfStore } from '../store/useGolfStore';
-import { calculateYardage } from '../utils/distance';
+import { calculateDistance, calculateDispersion } from '../lib/golfMath';
 
-export default function ShotTrackerDrawer({ isTracking, onSaveShot, onCancelShot }) {
-  const { currentLat, currentLng, gpsAccuracy } = useGolfStore();
-  const [startPos, setStartPos] = useState(null);
-  const [walkedDistance, setWalkedDistance] = useState(0);
-  const [club, setClub] = useState('Driver');
-  const [accuracy, setAccuracy] = useState('Center');
+export default function ShotTrackerDrawer() {
+  const { currentLat, currentLng, mapTarget, activeShot, startTrackingShot, endTrackingShot, clubs, currentRoundId } = useGolfStore();
+  const [selectedClub, setSelectedClub] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const clubs = ['Driver', '3 Wood', '4 Hybrid', '4 Iron', '5 Iron', '6 Iron', '7 Iron', '8 Iron', '9 Iron', 'PW', 'GW', 'SW', 'LW'];
-  const accuracies = ['Left', 'Center', 'Right', 'Short', 'Long'];
-
-  // Calculate distance with a noise filter to eliminate GPS drift/jitter
-  useEffect(() => {
-    if (startPos && currentLat && currentLng) {
-      const rawDist = calculateYardage(startPos.lat, startPos.lng, currentLat, currentLng);
-      // Noise filter: Ignore micro-movements under 5 yards caused by phone GPS drifting
-      const filteredDist = rawDist < 5 ? 0 : rawDist;
-      setWalkedDistance(filteredDist);
+  const handleStartShot = () => {
+    if (!currentLat) {
+      alert("GPS is still locating you. Please wait a moment.");
+      return;
     }
-  }, [currentLat, currentLng, startPos]);
-
-  useEffect(() => {
-    if (!isTracking) {
-      setStartPos(null);
-      setWalkedDistance(0);
+    if (!mapTarget) {
+      alert("Please tap the map to select a target line first.");
+      return;
     }
-  }, [isTracking]);
+    if (!selectedClub) {
+      alert("Please select a club.");
+      return;
+    }
 
-  if (!isTracking) return null;
+    startTrackingShot({
+      startLat: currentLat,
+      startLng: currentLng,
+      targetLat: mapTarget.lat,
+      targetLng: mapTarget.lng,
+      clubId: selectedClub
+    });
+  };
 
-  const handleMarkStart = () => {
-    if (currentLat && currentLng) {
-      setStartPos({ lat: currentLat, lng: currentLng });
+  const handleEndShot = async () => {
+    if (!currentLat) return;
+    setIsProcessing(true);
+
+    const distance = calculateDistance(activeShot.startLat, activeShot.startLng, currentLat, currentLng);
+    const offline = calculateDispersion(activeShot.startLat, activeShot.startLng, activeShot.targetLat, activeShot.targetLng, currentLat, currentLng);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data, error } = await supabase.from('shots').insert([{
+      user_id: user.id,
+      round_id: currentRoundId,
+      club_id: activeShot.clubId,
+      distance: distance,
+      offline_yards: offline,
+      lat: activeShot.startLat,
+      lng: activeShot.startLng
+    }]).select();
+
+    if (error) {
+      alert("Error saving shot: " + error.message);
     } else {
-      alert("Acquiring GPS signal... Please ensure location services are enabled.");
+      useGolfStore.setState((state) => ({ shots: [...state.shots, data[0]] }));
+      
+      const dirText = offline > 0 ? 'Right' : offline < 0 ? 'Left' : 'Dead Center';
+      alert(`Shot recorded!\nDistance: ${distance} yards\nDispersion: ${Math.abs(offline)} yards ${dirText}`);
+      
+      endTrackingShot();
+      setSelectedClub('');
     }
+    setIsProcessing(false);
   };
 
-  const handleSave = () => {
-    onSaveShot({ club, distance: walkedDistance, accuracy });
-    setStartPos(null);
-    setWalkedDistance(0);
-  };
+  if (!currentRoundId) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 rounded-t-3xl p-6 animate-in slide-in-from-bottom-full duration-300 shadow-[0_-15px_50px_rgba(0,0,0,0.8)]">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h3 className="text-xl font-black text-white">Shot Tracker</h3>
-          <p className="text-sky-400 font-bold text-xs uppercase tracking-wider">Walk to your ball</p>
-        </div>
-        <button onClick={onCancelShot} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
-      {!startPos ? (
-        <div className="space-y-3">
-          <button 
-            onClick={handleMarkStart}
-            className="w-full py-4 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-2xl text-lg flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg shadow-sky-500/20"
+    <div className="bg-slate-800 p-5 rounded-2xl shadow-lg border border-slate-700">
+      <h2 className="text-xl font-bold text-emerald-400 mb-4">Shot Tracker</h2>
+      
+      {!activeShot ? (
+        <div className="space-y-4">
+          <select 
+            className="w-full bg-slate-900 p-3 rounded-lg text-white border border-slate-600 focus:border-emerald-500 focus:outline-none"
+            value={selectedClub} onChange={(e) => setSelectedClub(e.target.value)}
           >
-            <MapPin className="w-5 h-5" />
-            Mark Start Location (At Ball)
+            <option value="" disabled>Select Club</option>
+            {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button 
+            onClick={handleStartShot}
+            className="w-full bg-emerald-500 text-slate-900 font-bold py-3 rounded-lg hover:bg-emerald-400 transition-colors"
+          >
+            Mark Shot Start
           </button>
-          {gpsAccuracy && (
-            <p className="text-center text-[10px] text-slate-500 font-medium">
-              GPS Signal Accuracy: ~{Math.round(gpsAccuracy)}m
-            </p>
-          )}
         </div>
       ) : (
-        <div className="space-y-5">
-          <div className="bg-slate-950 rounded-2xl p-5 text-center border border-slate-800 relative overflow-hidden shadow-inner">
-            <div className="absolute inset-0 bg-sky-500/5 animate-pulse"></div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Distance to Ball</p>
-            <div className="flex items-baseline justify-center gap-1">
-              <span className="text-5xl font-black text-white">{walkedDistance}</span>
-              <span className="text-sky-400 font-bold text-sm">yds</span>
-            </div>
-            <p className="text-[10px] text-emerald-400 mt-2 flex items-center justify-center gap-1 font-semibold">
-              <Navigation className="w-3 h-3 animate-spin" /> Live tracking active... walk to ball
-            </p>
+        <div className="space-y-4 text-center">
+          <div className="p-4 bg-slate-900 rounded-xl border border-emerald-500/30">
+            <p className="text-emerald-400 font-bold animate-pulse">Tracking Shot...</p>
+            <p className="text-sm text-slate-400 mt-1">Walk to your ball to record distance.</p>
+            {currentLat && (
+                <p className="text-2xl font-black text-white mt-3">
+                    {calculateDistance(activeShot.startLat, activeShot.startLng, currentLat, currentLng)} <span className="text-sm text-slate-400 font-normal">yds</span>
+                </p>
+            )}
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Club Used</label>
-              <select 
-                value={club} 
-                onChange={(e) => setClub(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-sky-500 focus:outline-none"
-              >
-                {clubs.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Result</label>
-              <select 
-                value={accuracy} 
-                onChange={(e) => setAccuracy(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-sky-500 focus:outline-none"
-              >
-                {accuracies.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={endTrackingShot}
+              className="w-1/3 bg-slate-700 text-white font-bold py-3 rounded-lg hover:bg-slate-600 transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={handleEndShot} disabled={isProcessing}
+              className="w-2/3 bg-emerald-500 text-slate-900 font-bold py-3 rounded-lg hover:bg-emerald-400 transition-colors disabled:opacity-50"
+            >
+              {isProcessing ? 'Saving...' : 'Record Shot End'}
+            </button>
           </div>
-
-          <button 
-            onClick={handleSave}
-            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-2xl text-lg flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg shadow-emerald-500/20"
-          >
-            <Save className="w-5 h-5" />
-            Save Shot to Analytics
-          </button>
         </div>
       )}
     </div>

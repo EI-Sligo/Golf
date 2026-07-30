@@ -1,51 +1,76 @@
 import React from 'react';
-import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import { useGolfStore } from '../store/useGolfStore';
+import { courseData } from '../lib/courseData';
 
-// Define the custom visual icons for the map
-const userIcon = new L.DivIcon({
-  className: 'custom-div-icon',
-  html: "<div style='background-color:#3498db; width:22px; height:22px; border-radius:50%; border:3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5);'></div>",
-  iconSize: [28, 28]
-});
+// Custom hook to listen for map taps
+function MapTapHandler() {
+  const setMapTarget = useGolfStore((state) => state.setMapTarget);
+  useMapEvents({
+    click(e) {
+      setMapTarget({ lat: e.latlng.lat, lng: e.latlng.lng });
+    }
+  });
+  return null;
+}
 
-const pinIcon = new L.DivIcon({
-  className: 'custom-div-icon',
-  html: "<div style='background-color:#e74c3c; width:15px; height:15px; border-radius:50%; border:2px solid white;'></div>",
-  iconSize: [15, 15]
-});
+export default function GolfMap() {
+  const { currentLat, currentLng, activeHole, mapTarget, activeShot } = useGolfStore();
+  const holeData = courseData[activeHole];
 
-export default function GolfMap({ userLocation, pinLocation }) {
-  const center = userLocation || [54.198594, -8.430418];
+  // Default center if GPS is still warming up (Castle Dargan Hole 1)
+  const centerLat = currentLat || 54.197806;
+  const centerLng = currentLng || -8.435885;
 
   return (
-    <div className="w-full h-[350px] rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 z-0 relative">
-      <MapContainer 
-        center={center} 
-        zoom={17} 
-        zoomControl={false} 
-        style={{ height: '100%', width: '100%', background: '#0f172a' }}
-      >
-        <TileLayer
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          attribution="&copy; Esri"
-          maxZoom={19}
-          keepBuffer={8}             // Pre-loads surrounding tiles in memory
-          updateWhenZooming={false}  // Prevents choppy loading during pinch-to-zoom
-          updateWhenIdle={true}      // Only fetches new data when panning stops
-        />
+    <div className="h-64 w-full rounded-2xl overflow-hidden border border-slate-700 shadow-lg relative">
+      <div className="absolute top-2 left-2 z-[400] bg-slate-900/80 px-3 py-1 rounded text-xs font-bold text-white border border-slate-700">
+        Hole {activeHole}
+      </div>
+      
+      <MapContainer center={[centerLat, centerLng]} zoom={16} className="h-full w-full" zoomControl={false}>
+        <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
         
-        {userLocation && <Marker position={userLocation} icon={userIcon} />}
-        {pinLocation && <Marker position={pinLocation} icon={pinIcon} />}
+        {/* Enables tapping the map to set a target */}
+        <MapTapHandler />
+
+        {/* User Location */}
+        {currentLat && currentLng && (
+          <Marker position={[currentLat, currentLng]} />
+        )}
+
+        {/* Target Line (Blue Dashed) - Drawn from current location to tapped target */}
+        {currentLat && mapTarget && !activeShot && (
+          <Polyline positions={[[currentLat, currentLng], [mapTarget.lat, mapTarget.lng]]} color="#38bdf8" dashArray="5, 5" weight={3} />
+        )}
+
+        {/* Pin Location & Line (Red) */}
+        {holeData && (
+          <>
+             <Marker position={[holeData.pin.lat, holeData.pin.lng]} />
+             {currentLat && !activeShot && (
+               <Polyline positions={[[currentLat, currentLng], [holeData.pin.lat, holeData.pin.lng]]} color="#ef4444" weight={2} opacity={0.6} />
+             )}
+          </>
+        )}
         
-        {userLocation && pinLocation && (
-          <Polyline 
-            positions={[userLocation, pinLocation]} 
-            pathOptions={{ color: '#f1c40f', weight: 3, dashArray: '5, 5' }} 
-          />
+        {/* If tracking a shot, show the origin point and target line locked in place */}
+        {activeShot && (
+          <>
+            <Marker position={[activeShot.startLat, activeShot.startLng]} opacity={0.5} />
+            <Polyline positions={[[activeShot.startLat, activeShot.startLng], [activeShot.targetLat, activeShot.targetLng]]} color="#38bdf8" dashArray="5, 5" weight={3} opacity={0.5} />
+            <Polyline positions={[[activeShot.startLat, activeShot.startLng], [currentLat, currentLng]]} color="#10b981" weight={3} />
+          </>
         )}
       </MapContainer>
+      
+      {/* Help text */}
+      {!activeShot && (
+        <p className="text-[10px] text-slate-400 text-center mt-1 absolute bottom-1 w-full z-[400] bg-slate-900/70 py-1">
+          Tap map to set target line
+        </p>
+      )}
     </div>
   );
 }
