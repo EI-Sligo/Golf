@@ -20,6 +20,7 @@ export const calculateDistance = (lat1, lon1, lat2, lon2) => {
 
 export const calculateBearing = (lat1, lon1, lat2, lon2) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  
   const phi1 = toRad(lat1);
   const phi2 = toRad(lat2);
   const deltaLambda = toRad(lon2 - lon1);
@@ -40,7 +41,7 @@ export const calculateDispersion = (startLat, startLng, targetLat, targetLng, en
   return Math.round(dxt * R_YARDS);
 };
 
-// --- NEW: Smart Caddy AI Math ---
+// --- SMART CADDY AI ---
 
 export const calculatePlaysLike = (directYards, shotBearing, windSpeed, windDirDeg, elevationFeet) => {
   if (!directYards) return 0;
@@ -51,13 +52,13 @@ export const calculatePlaysLike = (directYards, shotBearing, windSpeed, windDirD
   // Wind: Calculate the vector of the wind relative to the shot bearing
   // If wind is coming from the exact same direction as the shot (headwind), cos(0) = 1
   const windAngleRad = toRad(windDirDeg - shotBearing);
-  const windAdjustment = windSpeed * Math.cos(windAngleRad) * 1.2; // 1.2 is a general multiplier for wind effect
-
+  const windAdjustment = windSpeed * Math.cos(windAngleRad) * 1.2; 
+  
   return Math.round(directYards + elevationAdjustment + windAdjustment);
 };
 
 export const getRecommendedClub = (playsLikeYards, clubs) => {
-  if (!clubs || clubs.length === 0 || playsLikeYards === 0) return "No Clubs Added";
+  if (!clubs || clubs.length === 0 || playsLikeYards === 0) return "No Clubs";
   
   // Find the club with an avg_distance closest to the playsLike distance
   const closest = clubs.reduce((prev, curr) => {

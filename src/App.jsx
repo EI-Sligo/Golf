@@ -76,13 +76,12 @@ function App() {
     return () => { if (watchId) Geolocation.clearWatch({ id: watchId }); };
   }, [user, setLocation]);
 
-  // NEW: Geofencing Auto-Hole Advancement
+  // Geofencing Auto-Hole Advancement
   useEffect(() => {
     if (currentLat && currentLng && activeHole < 18) {
       const nextHole = courseData[activeHole + 1];
       if (nextHole && nextHole.tees && nextHole.tees[0]) {
         const distToNextTee = calculateDistance(currentLat, currentLng, nextHole.tees[0].lat, nextHole.tees[0].lng);
-        // If user walks within 25 yards of the NEXT tee box, auto-advance the hole
         if (distToNextTee < 25) {
           setActiveHole(activeHole + 1);
           setMapTarget(null); 
@@ -96,9 +95,9 @@ function App() {
       case 'play':
         if (!currentRoundId) {
           return (
-            <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
+            <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700 my-4">
               <h2 className="text-2xl font-bold text-emerald-400 mb-2 text-center">Ready to Golf?</h2>
-              <p className="text-slate-400 text-center mb-6 text-sm">Start a round to enable GPS tracking and shot logging.</p>
+              <p className="text-slate-400 text-center mb-6 text-sm">Start a round to enable GPS tracking and scorecards.</p>
               
               <form onSubmit={async (e) => {
                 e.preventDefault();
@@ -106,7 +105,6 @@ function App() {
                 if (!finalCourseName) return;
 
                 const { data: { user } } = await supabase.auth.getUser();
-                // We create the row in the DB immediately. 
                 const { data } = await supabase.from('rounds').insert([{ user_id: user.id, course_name: finalCourseName }]).select();
                 
                 if (data) {
@@ -118,7 +116,7 @@ function App() {
                 <select 
                   value={newRoundCourse} 
                   onChange={(e) => setNewRoundCourse(e.target.value)}
-                  className="w-full bg-slate-900 p-4 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none appearance-none"
+                  className="w-full bg-slate-900 p-4 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none"
                 >
                   <option value="Castle Dargan Golf Club">Castle Dargan Golf Club</option>
                   <option value="Other">Other Course...</option>
@@ -141,16 +139,16 @@ function App() {
         }
         
         return (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <HeroDistanceCard />
             <GolfMap />
             <ShotTrackerDrawer />
             <FullScorecard />
           </div>
         );
-      case 'bag': return <div className="space-y-6"><ClubBagManager /><DispersionAnalytics /></div>;
-      case 'history': return <div className="space-y-6"><RoundHistory /></div>;
-      case 'guides': return <div className="space-y-6"><SwingThoughtsRules /></div>;
+      case 'bag': return <div className="space-y-4"><ClubBagManager /><DispersionAnalytics /></div>;
+      case 'history': return <div className="space-y-4"><RoundHistory /></div>;
+      case 'guides': return <div className="space-y-4"><SwingThoughtsRules /></div>;
       default: return null;
     }
   };
@@ -159,26 +157,27 @@ function App() {
   if (!user) return <Auth />;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white pb-20">
+    <div className="min-h-screen bg-slate-900 text-white relative">
       <header className="p-4 bg-slate-800 shadow-md flex justify-between items-center sticky top-0 z-40">
         <h1 className="text-xl font-bold text-emerald-400">Golf Caddy</h1>
         <button onClick={() => supabase.auth.signOut()} className="text-sm font-semibold text-slate-300 hover:text-white bg-slate-700 px-3 py-1 rounded transition-colors">Sign Out</button>
       </header>
 
-      <main className="max-w-md mx-auto p-4">
+      {/* pb-32 ensures content clears the fixed bottom nav bar */}
+      <main className="w-full px-3 py-4 max-w-lg mx-auto pb-32">
         {renderTabContent()}
       </main>
 
       <ScoreEntryModal />
 
-      <nav className="fixed bottom-0 w-full bg-slate-800 border-t border-slate-700 flex justify-around z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+      <nav className="fixed bottom-0 left-0 right-0 w-full bg-slate-800 border-t border-slate-700 flex justify-around z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] py-2">
         {['play', 'bag', 'history', 'guides'].map(tab => (
           <button 
             key={tab}
             onClick={() => setActiveTab(tab)} 
-            className={`flex-1 py-4 text-center transition-colors ${activeTab === tab ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-2 text-center transition-colors ${activeTab === tab ? 'text-emerald-400 bg-slate-800/80 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            <span className="text-sm font-bold capitalize">
+            <span className="text-xs capitalize block">
               {tab === 'play' ? '⛳ Play' : tab === 'bag' ? '🎒 Bag' : tab === 'history' ? '📊 Stats' : '🏌️ Rules'}
             </span>
           </button>

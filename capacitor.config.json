@@ -1,6 +1,6 @@
 {
   "appId": "com.decmcm.golfcaddy",
-  "appName": "Castle Dargan Caddy",
+  "appName": "Golf Caddy",
   "webDir": "dist",
   "bundledWebRuntime": false
 }
