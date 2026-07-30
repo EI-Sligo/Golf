@@ -11,55 +11,73 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
     
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) alert(error.message);
-      else alert('Account created successfully! You can now log in.');
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
+    try {
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert('Success! You can now sign in.');
+        setIsSignUp(false);
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        // Successful login will automatically trigger the App.jsx listener and switch the screen
+      }
+    } catch (error) {
+      alert("Login Error: " + error.message); // This will tell us EXACTLY what is wrong
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <div className="flex flex-col justify-center min-h-screen bg-slate-950 p-6">
-      <div className="w-full max-w-sm mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-        <h1 className="text-3xl font-black text-white mb-2 text-center">Caddy<span className="text-emerald-400">Pro</span></h1>
-        <p className="text-slate-400 text-sm text-center mb-6 font-medium">Log in to sync your bag and track shots.</p>
-        
-        <form onSubmit={handleAuth} className="flex flex-col gap-4">
-          <input
-            type="email"
-            placeholder="Email address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:border-emerald-500 focus:outline-none"
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:border-emerald-500 focus:outline-none"
-            required
-          />
-          <button
-            type="submit"
+    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 px-4">
+      <div className="w-full max-w-md bg-slate-800 p-8 rounded-2xl shadow-xl border border-slate-700">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-black text-emerald-400 mb-2">Golf Caddy</h1>
+          <p className="text-slate-400">Track your game, master the course.</p>
+        </div>
+
+        <form onSubmit={handleAuth} className="space-y-5">
+          <div>
+            <label className="block text-slate-400 text-xs font-bold mb-2 uppercase tracking-wide">Email</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-slate-900 p-4 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none"
+              placeholder="golfer@example.com"
+              required 
+            />
+          </div>
+          <div>
+            <label className="block text-slate-400 text-xs font-bold mb-2 uppercase tracking-wide">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-slate-900 p-4 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none"
+              placeholder="••••••••"
+              required 
+            />
+          </div>
+
+          <button 
+            type="submit" 
             disabled={loading}
-            className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl transition-all disabled:opacity-50"
+            className="w-full bg-emerald-500 text-slate-900 font-black py-4 rounded-xl hover:bg-emerald-400 transition-colors mt-4 disabled:opacity-50"
           >
             {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
           </button>
         </form>
 
-        <button 
-          onClick={() => setIsSignUp(!isSignUp)}
-          className="w-full text-slate-400 text-sm mt-4 hover:text-white transition-colors"
-        >
-          {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
-        </button>
+        <div className="mt-6 text-center">
+          <button 
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-slate-400 hover:text-emerald-400 text-sm font-bold transition-colors"
+          >
+            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -14,7 +14,6 @@ export default function ScoreEntryModal() {
   const [putts, setPutts] = useState(existingScore.putts);
   const [fairway, setFairway] = useState(existingScore.fairway);
 
-  // Sync state if the user changes holes while the modal is closed
   useEffect(() => {
     setStrokes(existingScore.strokes);
     setPutts(existingScore.putts);

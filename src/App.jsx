@@ -3,6 +3,8 @@ import { supabase } from './lib/supabase';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { useGolfStore } from './store/useGolfStore';
+import { courseData } from './lib/courseData';
+import { calculateDistance } from './lib/golfMath';
 
 // Components
 import Auth from './components/Auth';
@@ -21,22 +23,16 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('play');
   
-  // State for the Course Selector
-  const [newRoundCourse, setNewRoundCourse] = useState('Castle Dargan');
+  const [newRoundCourse, setNewRoundCourse] = useState('Castle Dargan Golf Club');
   const [customCourseName, setCustomCourseName] = useState('');
   
-  // Reactively pull the currentRoundId so the UI updates instantly!
-  const currentRoundId = useGolfStore((state) => state.currentRoundId);
-  const setLocation = useGolfStore((state) => state.setLocation);
+  const { currentRoundId, currentLat, currentLng, activeHole, setLocation, setActiveHole, setMapTarget } = useGolfStore();
 
-  // 1. Supabase Authentication Listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      if (currentUser) {
-        useGolfStore.getState().fetchInitialData(currentUser.id);
-      }
+      if (currentUser) useGolfStore.getState().fetchInitialData(currentUser.id);
       setLoading(false);
     });
 
@@ -54,32 +50,21 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Native Hardware GPS Tracker
+  // Native GPS Tracker
   useEffect(() => {
     let watchId;
-
     const startNativeTracking = async () => {
       try {
         if (Capacitor.isNativePlatform()) {
           const permissions = await Geolocation.checkPermissions();
-          if (permissions.location !== 'granted') {
-            await Geolocation.requestPermissions();
-          }
+          if (permissions.location !== 'granted') await Geolocation.requestPermissions();
         }
 
         watchId = await Geolocation.watchPosition(
           { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 },
           (position, err) => {
-            if (err) {
-              console.warn("GPS Error:", err);
-              return;
-            }
-            if (position) {
-              setLocation(
-                position.coords.latitude, 
-                position.coords.longitude, 
-                position.coords.accuracy
-              );
+            if (!err && position) {
+              setLocation(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
             }
           }
         );
@@ -87,23 +72,28 @@ function App() {
         console.error("Geolocation init error:", error);
       }
     };
-
-    if (user) {
-      startNativeTracking();
-    }
-
-    return () => {
-      if (watchId) {
-        Geolocation.clearWatch({ id: watchId });
-      }
-    };
+    if (user) startNativeTracking();
+    return () => { if (watchId) Geolocation.clearWatch({ id: watchId }); };
   }, [user, setLocation]);
 
-  // 3. Tab Router
+  // NEW: Geofencing Auto-Hole Advancement
+  useEffect(() => {
+    if (currentLat && currentLng && activeHole < 18) {
+      const nextHole = courseData[activeHole + 1];
+      if (nextHole && nextHole.tees && nextHole.tees[0]) {
+        const distToNextTee = calculateDistance(currentLat, currentLng, nextHole.tees[0].lat, nextHole.tees[0].lng);
+        // If user walks within 25 yards of the NEXT tee box, auto-advance the hole
+        if (distToNextTee < 25) {
+          setActiveHole(activeHole + 1);
+          setMapTarget(null); 
+        }
+      }
+    }
+  }, [currentLat, currentLng, activeHole, setActiveHole, setMapTarget]);
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'play':
-        // Show Start Round UI if no round is active (now fully reactive!)
         if (!currentRoundId) {
           return (
             <div className="bg-slate-800 p-6 rounded-2xl shadow-lg border border-slate-700">
@@ -116,6 +106,7 @@ function App() {
                 if (!finalCourseName) return;
 
                 const { data: { user } } = await supabase.auth.getUser();
+                // We create the row in the DB immediately. 
                 const { data } = await supabase.from('rounds').insert([{ user_id: user.id, course_name: finalCourseName }]).select();
                 
                 if (data) {
@@ -124,24 +115,19 @@ function App() {
                 }
               }} className="space-y-4">
                 
-                {/* Course Dropdown */}
                 <select 
                   value={newRoundCourse} 
                   onChange={(e) => setNewRoundCourse(e.target.value)}
                   className="w-full bg-slate-900 p-4 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none appearance-none"
                 >
-                  <option value="Castle Dargan">Castle Dargan Golf Club</option>
+                  <option value="Castle Dargan Golf Club">Castle Dargan Golf Club</option>
                   <option value="Other">Other Course...</option>
                 </select>
 
-                {/* Custom Entry if 'Other' is selected */}
                 {newRoundCourse === 'Other' && (
                   <input 
-                    type="text" 
-                    placeholder="Enter Course Name" 
-                    required 
-                    value={customCourseName}
-                    onChange={(e) => setCustomCourseName(e.target.value)}
+                    type="text" placeholder="Enter Course Name" required 
+                    value={customCourseName} onChange={(e) => setCustomCourseName(e.target.value)}
                     className="w-full bg-slate-900 p-4 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none" 
                   />
                 )}
@@ -154,7 +140,6 @@ function App() {
           );
         }
         
-        // If round is active, show the Map and Tracker
         return (
           <div className="space-y-6">
             <HeroDistanceCard />
@@ -163,89 +148,41 @@ function App() {
             <FullScorecard />
           </div>
         );
-      case 'bag':
-        return (
-          <div className="space-y-6">
-            <ClubBagManager />
-            <DispersionAnalytics />
-          </div>
-        );
-      case 'history':
-        return (
-          <div className="space-y-6">
-            <RoundHistory />
-          </div>
-        );
-      case 'guides':
-        return (
-          <div className="space-y-6">
-            <SwingThoughtsRules />
-          </div>
-        );
-      default:
-        return null;
+      case 'bag': return <div className="space-y-6"><ClubBagManager /><DispersionAnalytics /></div>;
+      case 'history': return <div className="space-y-6"><RoundHistory /></div>;
+      case 'guides': return <div className="space-y-6"><SwingThoughtsRules /></div>;
+      default: return null;
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white">
-        <div className="animate-pulse">Loading Golf Caddy...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Auth />;
-  }
+  if (loading) return <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white"><div className="animate-pulse">Loading Golf Caddy...</div></div>;
+  if (!user) return <Auth />;
 
   return (
     <div className="min-h-screen bg-slate-900 text-white pb-20">
-      {/* Header */}
       <header className="p-4 bg-slate-800 shadow-md flex justify-between items-center sticky top-0 z-40">
         <h1 className="text-xl font-bold text-emerald-400">Golf Caddy</h1>
-        <button 
-          onClick={() => supabase.auth.signOut()} 
-          className="text-sm font-semibold text-slate-300 hover:text-white bg-slate-700 px-3 py-1 rounded transition-colors"
-        >
-          Sign Out
-        </button>
+        <button onClick={() => supabase.auth.signOut()} className="text-sm font-semibold text-slate-300 hover:text-white bg-slate-700 px-3 py-1 rounded transition-colors">Sign Out</button>
       </header>
 
-      {/* Main Content Area */}
       <main className="max-w-md mx-auto p-4">
         {renderTabContent()}
       </main>
 
-      {/* Modals & Overlays */}
       <ScoreEntryModal />
 
-      {/* Bottom Mobile Navigation */}
       <nav className="fixed bottom-0 w-full bg-slate-800 border-t border-slate-700 flex justify-around z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-        <button 
-          onClick={() => setActiveTab('play')} 
-          className={`flex-1 py-4 text-center transition-colors ${activeTab === 'play' ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
-        >
-          <span className="text-sm font-bold">⛳ Play</span>
-        </button>
-        <button 
-          onClick={() => setActiveTab('bag')} 
-          className={`flex-1 py-4 text-center transition-colors ${activeTab === 'bag' ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
-        >
-          <span className="text-sm font-bold">🎒 Bag</span>
-        </button>
-        <button 
-          onClick={() => setActiveTab('history')} 
-          className={`flex-1 py-4 text-center transition-colors ${activeTab === 'history' ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
-        >
-          <span className="text-sm font-bold">📊 Stats</span>
-        </button>
-        <button 
-          onClick={() => setActiveTab('guides')} 
-          className={`flex-1 py-4 text-center transition-colors ${activeTab === 'guides' ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
-        >
-          <span className="text-sm font-bold">🏌️ Rules</span>
-        </button>
+        {['play', 'bag', 'history', 'guides'].map(tab => (
+          <button 
+            key={tab}
+            onClick={() => setActiveTab(tab)} 
+            className={`flex-1 py-4 text-center transition-colors ${activeTab === tab ? 'text-emerald-400 border-t-2 border-emerald-400 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            <span className="text-sm font-bold capitalize">
+              {tab === 'play' ? '⛳ Play' : tab === 'bag' ? '🎒 Bag' : tab === 'history' ? '📊 Stats' : '🏌️ Rules'}
+            </span>
+          </button>
+        ))}
       </nav>
     </div>
   );

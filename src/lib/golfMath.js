@@ -1,10 +1,8 @@
-// Earth radius in yards
-const R_YARDS = 6967420;
+const R_YARDS = 6967420; // Earth radius in yards
 
-const toRad = (degrees) => (degrees * Math.PI) / 180;
-const toDeg = (radians) => (radians * 180) / Math.PI;
+export const toRad = (degrees) => (degrees * Math.PI) / 180;
+export const toDeg = (radians) => (radians * 180) / Math.PI;
 
-// Calculates direct distance between two coordinates in yards
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
   
@@ -20,8 +18,8 @@ export const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return Math.round(R_YARDS * c);
 };
 
-// Calculates the compass bearing from point 1 to point 2
-const calculateBearing = (lat1, lon1, lat2, lon2) => {
+export const calculateBearing = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
   const phi1 = toRad(lat1);
   const phi2 = toRad(lat2);
   const deltaLambda = toRad(lon2 - lon1);
@@ -33,15 +31,38 @@ const calculateBearing = (lat1, lon1, lat2, lon2) => {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 };
 
-// Calculates how far left (negative) or right (positive) a shot was from the target line
 export const calculateDispersion = (startLat, startLng, targetLat, targetLng, endLat, endLng) => {
-  // Angular distance from start to end
   const d13 = calculateDistance(startLat, startLng, endLat, endLng) / R_YARDS; 
   const theta13 = toRad(calculateBearing(startLat, startLng, endLat, endLng));
   const theta12 = toRad(calculateBearing(startLat, startLng, targetLat, targetLng));
 
-  // Cross-track distance formula
   const dxt = Math.asin(Math.sin(d13) * Math.sin(theta13 - theta12));
-  
   return Math.round(dxt * R_YARDS);
+};
+
+// --- NEW: Smart Caddy AI Math ---
+
+export const calculatePlaysLike = (directYards, shotBearing, windSpeed, windDirDeg, elevationFeet) => {
+  if (!directYards) return 0;
+  
+  // Elevation: roughly +/- 1 yard for every 3 feet of elevation change
+  const elevationAdjustment = elevationFeet / 3;
+  
+  // Wind: Calculate the vector of the wind relative to the shot bearing
+  // If wind is coming from the exact same direction as the shot (headwind), cos(0) = 1
+  const windAngleRad = toRad(windDirDeg - shotBearing);
+  const windAdjustment = windSpeed * Math.cos(windAngleRad) * 1.2; // 1.2 is a general multiplier for wind effect
+
+  return Math.round(directYards + elevationAdjustment + windAdjustment);
+};
+
+export const getRecommendedClub = (playsLikeYards, clubs) => {
+  if (!clubs || clubs.length === 0 || playsLikeYards === 0) return "No Clubs Added";
+  
+  // Find the club with an avg_distance closest to the playsLike distance
+  const closest = clubs.reduce((prev, curr) => {
+    return (Math.abs(curr.avg_distance - playsLikeYards) < Math.abs(prev.avg_distance - playsLikeYards) ? curr : prev);
+  });
+  
+  return closest.name;
 };
