@@ -32,7 +32,6 @@ export default function HeroDistanceCard() {
 
   const hole = courseData[activeHole];
   
-  // Standard green reference yardages
   const distCenter = (currentLat && hole?.pin) 
     ? calculateDistance(currentLat, currentLng, hole.pin.lat, hole.pin.lng) 
     : 0;
@@ -45,7 +44,6 @@ export default function HeroDistanceCard() {
     ? calculateDistance(currentLat, currentLng, hole.back.lat, hole.back.lng) 
     : 0;
   
-  // Use custom map target if active, otherwise default to the hole pin
   const targetLat = mapTarget ? mapTarget.lat : hole?.pin?.lat;
   const targetLng = mapTarget ? mapTarget.lng : hole?.pin?.lng;
 
@@ -135,8 +133,19 @@ export default function HeroDistanceCard() {
                 onChange={e => setWindSpeed(Number(e.target.value))} 
               />
             </div>
+            
+            {/* Wind Direction with Rotating Visual Arrow */}
             <div className="bg-slate-900 rounded-xl p-2.5 border border-slate-700 text-center">
-              <p className="text-[9px] text-slate-400 uppercase font-bold mb-1">Dir (°)</p>
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <p className="text-[9px] text-slate-400 uppercase font-bold">Dir (°)</p>
+                <span 
+                  className="text-sky-400 text-xs inline-block transition-transform duration-300 font-black" 
+                  style={{ transform: `rotate(${windDir}deg)` }}
+                  title="Wind Direction Arrow"
+                >
+                  ⬇
+                </span>
+              </div>
               <input 
                 type="number" 
                 className="w-full bg-transparent text-white font-bold text-center text-sm focus:outline-none" 
@@ -144,6 +153,7 @@ export default function HeroDistanceCard() {
                 onChange={e => setWindDir(Number(e.target.value))} 
               />
             </div>
+
             <div className="bg-slate-900 rounded-xl p-2.5 border border-slate-700 text-center">
               <p className="text-[9px] text-slate-400 uppercase font-bold mb-1">Elev Diff (ft)</p>
               <input 

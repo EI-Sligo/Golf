@@ -14,7 +14,7 @@ export default function ScoreEntryModal() {
   const accuracies = ['Very Left', 'Left', 'Fairway', 'Right', 'Very Right', 'Fairway Bunker', 'Greenside Bunker'];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
       <div className="w-full max-w-sm bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-2xl text-white space-y-4 my-auto">
         <div className="flex justify-between items-center border-b border-slate-700 pb-3">
           <h3 className="text-xl font-bold text-emerald-400">Hole {activeHole} Score</h3>
