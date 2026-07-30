@@ -49,16 +49,22 @@ export default function ShotTrackerDrawer() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Fixed: Now correctly sends 'hole_number' to prevent database constraints errors
+      // Find the club name string to satisfy the legacy "club" NOT NULL database constraint
+      const selectedClubObj = clubs.find(c => c.id === activeShot.club_id);
+      const clubName = selectedClubObj ? selectedClubObj.name : 'Unknown Club';
+
       const { error } = await supabase.from('shots').insert([{
         user_id: user.id,
         round_id: currentRoundId,
         hole_number: activeHole,
         club_id: activeShot.club_id,
+        club: clubName, // Fixes the "null value in column 'club'" error
         start_lat: activeShot.startLat,
         start_lng: activeShot.startLng,
         target_lat: activeShot.targetLat,
         target_lng: activeShot.targetLng,
+        lat: currentLat, // Saves the final ball resting latitude
+        lng: currentLng, // Saves the final ball resting longitude
         distance: liveDistance
       }]);
 

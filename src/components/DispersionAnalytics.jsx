@@ -1,198 +1,187 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { X, Target, ArrowLeftRight, TrendingUp, Trash2 } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { useGolfStore } from '../store/useGolfStore';
 
-export default function DispersionAnalytics({ isOpen, onClose }) {
-  const [shots, setShots] = useState([]);
-  const [selectedClub, setSelectedClub] = useState('All');
-  const [loading, setLoading] = useState(true);
+export default function DispersionAnalytics() {
+  const { rounds, shots, clubs } = useGolfStore();
 
-  // Fetch shots whenever the drawer is opened
-  useEffect(() => {
-    if (isOpen) fetchShots();
-  }, [isOpen]);
-
-  const fetchShots = async () => {
-    setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('shots')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-      setShots(data || []);
-    } catch (error) {
-      console.error("Error fetching shots:", error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // NEW: Clear all tracked shots
-  const handleClearData = async () => {
-    if (!window.confirm("Are you sure you want to delete all tracked shots? This cannot be undone.")) return;
+  const analytics = useMemo(() => {
+    let totalHoles = 0;
+    let totalPutts = 0;
+    let fairwaysHit = 0;
+    let greensHit = 0;
     
-    setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from('shots').delete().eq('user_id', user.id);
+    let missesLeft = 0;
+    let missesRight = 0;
+    
+    let bunkersHit = 0;
+    let penalties = 0;
+
+    // Crunch Round Scorecard Data
+    rounds.forEach(round => {
+      const scorecard = round.scorecard || {};
       
-      if (error) throw error;
-      setShots([]); // Clear local state
-      setSelectedClub('All');
-    } catch (error) {
-      alert("Failed to clear data: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+      Object.values(scorecard).forEach(hole => {
+        totalHoles++;
+        totalPutts += (hole.putts || 0);
+        
+        const outcome = hole.fairway || '';
+        
+        // FIR & GIR Logic
+        if (outcome.includes('Fairway') && !outcome.includes('Bunker')) fairwaysHit++;
+        if (outcome.includes('Green')) greensHit++;
+        
+        // Directional Tendencies
+        if (outcome.includes('Left')) missesLeft++;
+        if (outcome.includes('Right')) missesRight++;
+        
+        // Hazards
+        if (outcome.includes('Bunker')) bunkersHit++;
+        if (outcome.includes('Penalty') || outcome.includes('Hazard')) penalties++;
+      });
+    });
 
-  if (!isOpen) return null;
+    // Crunch GPS Shot Tracker Data for Club Yardages
+    const clubStats = {};
+    shots.forEach(shot => {
+      if (shot.distance && shot.club_id) {
+        if (!clubStats[shot.club_id]) {
+          clubStats[shot.club_id] = { totalDistance: 0, count: 0 };
+        }
+        clubStats[shot.club_id].totalDistance += shot.distance;
+        clubStats[shot.club_id].count += 1;
+      }
+    });
 
-  const availableClubs = ['All', ...new Set(shots.map(s => s.club))];
-  const filteredShots = selectedClub === 'All' 
-    ? shots 
-    : shots.filter(s => s.club === selectedClub);
+    const clubAverages = clubs.map(club => {
+      const stats = clubStats[club.id];
+      const avgActual = stats ? Math.round(stats.totalDistance / stats.count) : 0;
+      return {
+        ...club,
+        avgActual,
+        shotsTracked: stats ? stats.count : 0
+      };
+    }).sort((a, b) => b.avg_distance - a.avg_distance);
 
-  const totalShots = filteredShots.length;
+    return {
+      totalHoles,
+      avgPutts: totalHoles > 0 ? (totalPutts / totalHoles).toFixed(1) : 0,
+      firPercent: totalHoles > 0 ? Math.round((fairwaysHit / totalHoles) * 100) : 0,
+      girPercent: totalHoles > 0 ? Math.round((greensHit / totalHoles) * 100) : 0,
+      missesLeft,
+      missesRight,
+      bunkersHit,
+      penalties,
+      clubAverages
+    };
+  }, [rounds, shots, clubs]);
 
-  const avgDistance = totalShots > 0 
-    ? Math.round(filteredShots.reduce((acc, curr) => acc + curr.distance, 0) / totalShots)
-    : 0;
+  if (analytics.totalHoles === 0) {
+    return (
+      <div className="bg-slate-800 p-8 rounded-2xl shadow-lg border border-slate-700 text-center my-4">
+        <span className="text-4xl block mb-3">📊</span>
+        <h3 className="text-xl font-bold text-emerald-400 mb-2">No Data Yet</h3>
+        <p className="text-slate-400 text-sm">Analytics will generate automatically after you score your first hole.</p>
+      </div>
+    );
+  }
 
-  // UPDATED: Smarter accuracy string matching
-  const counts = { Center: 0, Left: 0, Right: 0, Short: 0, Long: 0 };
-  filteredShots.forEach(shot => {
-    const rawAcc = shot.accuracy ? shot.accuracy.toLowerCase() : '';
-    let mappedAcc = 'Center';
-    
-    if (rawAcc.includes('left')) mappedAcc = 'Left';
-    else if (rawAcc.includes('right')) mappedAcc = 'Right';
-    else if (rawAcc.includes('short')) mappedAcc = 'Short';
-    else if (rawAcc.includes('long')) mappedAcc = 'Long';
-
-    if (counts[mappedAcc] !== undefined) counts[mappedAcc]++;
-  });
-
-  const getPercent = (count) => totalShots === 0 ? 0 : Math.round((count / totalShots) * 100);
-
-  let topMiss = "N/A";
-  let topMissCount = 0;
-  Object.entries(counts).forEach(([key, val]) => {
-    if (key !== 'Center' && val > topMissCount) {
-      topMissCount = val;
-      topMiss = key;
-    }
-  });
+  const totalMisses = analytics.missesLeft + analytics.missesRight || 1; 
+  const leftPercent = Math.round((analytics.missesLeft / totalMisses) * 100);
+  const rightPercent = Math.round((analytics.missesRight / totalMisses) * 100);
 
   return (
-    <div className="fixed inset-0 z-[80] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-full duration-300">
+    <div className="space-y-4 pb-10">
       
-      <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900">
-        <div>
-          <h2 className="text-xl font-black text-white">Shot Dispersion</h2>
-          <p className="text-rose-400 font-bold text-xs uppercase tracking-wider">Target Analytics</p>
+      {/* Accuracy Dashboard */}
+      <div className="bg-slate-800 rounded-2xl shadow-lg border border-slate-700 overflow-hidden">
+        <div className="bg-slate-900 p-4 border-b border-slate-700">
+          <h2 className="text-lg font-black text-white">Scoring Accuracy</h2>
+          <p className="text-xs text-slate-400">Based on {analytics.totalHoles} holes played</p>
         </div>
-        <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
         
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-          <label className="text-xs font-bold uppercase text-slate-400 block mb-2">Select Club to Analyze</label>
-          <select 
-            value={selectedClub}
-            onChange={(e) => setSelectedClub(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-rose-500 focus:outline-none"
-          >
-            {availableClubs.map(club => (
-              <option key={club} value={club}>{club} {club !== 'All' ? 'Data' : 'Clubs'}</option>
-            ))}
-          </select>
+        <div className="grid grid-cols-3 divide-x divide-slate-700 border-b border-slate-700">
+          <div className="p-4 text-center">
+            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-2">FIR</p>
+            <p className="text-2xl font-black text-emerald-400">{analytics.firPercent}%</p>
+          </div>
+          <div className="p-4 text-center bg-slate-800/50">
+            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-2">GIR</p>
+            <p className="text-2xl font-black text-emerald-400">{analytics.girPercent}%</p>
+          </div>
+          <div className="p-4 text-center">
+            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-2">Avg Putts</p>
+            <p className="text-2xl font-black text-sky-400">{analytics.avgPutts}</p>
+          </div>
         </div>
 
-        {loading ? (
-          <div className="text-center py-12 text-slate-500 text-sm font-medium">Loading data...</div>
-        ) : totalShots === 0 ? (
-          <div className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-8 text-center">
-            <p className="text-slate-400 font-semibold text-sm">No shots logged yet.</p>
+        {/* Miss Tendency Bar */}
+        <div className="p-5">
+          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-3 text-center">Miss Tendency (Left vs Right)</p>
+          <div className="w-full h-4 bg-slate-900 rounded-full overflow-hidden flex shadow-inner">
+            <div style={{ width: `${leftPercent}%` }} className="h-full bg-rose-500 transition-all"></div>
+            <div style={{ width: `${rightPercent}%` }} className="h-full bg-amber-500 transition-all"></div>
           </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center shadow-md flex flex-col items-center">
-                <Target className="w-5 h-5 text-emerald-400 mb-1" />
-                <p className="text-[10px] font-bold uppercase text-slate-400">Accuracy</p>
-                <p className="text-2xl font-black text-white">{getPercent(counts.Center)}%</p>
-              </div>
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center shadow-md flex flex-col items-center">
-                <TrendingUp className="w-5 h-5 text-amber-400 mb-1" />
-                <p className="text-[10px] font-bold uppercase text-slate-400">Avg Distance</p>
-                <p className="text-2xl font-black text-white">{avgDistance} <span className="text-xs text-slate-400 font-normal">yds</span></p>
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg flex flex-col items-center relative">
-              <p className="text-xs font-bold uppercase text-slate-400 mb-6 tracking-wider w-full text-left">Dispersion Heatmap</p>
-              
-              <div className="relative w-64 h-64 border-2 border-slate-800 rounded-full flex items-center justify-center">
-                <div className="absolute w-48 h-48 border border-slate-700/50 rounded-full"></div>
-                <div className="absolute w-32 h-32 border border-slate-700/50 rounded-full"></div>
-                <div className="absolute w-16 h-16 border-2 border-emerald-500/50 bg-emerald-500/10 rounded-full"></div>
-                
-                <div className="absolute w-full h-[1px] bg-slate-800"></div>
-                <div className="absolute h-full w-[1px] bg-slate-800"></div>
-
-                <div className="absolute top-2 text-xs font-black text-amber-400 flex flex-col items-center">
-                  <span>LONG</span>
-                  <span>{getPercent(counts.Long)}%</span>
-                </div>
-                <div className="absolute bottom-2 text-xs font-black text-amber-400 flex flex-col items-center">
-                  <span>{getPercent(counts.Short)}%</span>
-                  <span>SHORT</span>
-                </div>
-                <div className="absolute left-2 text-xs font-black text-rose-400 flex flex-col items-center">
-                  <span>LEFT</span>
-                  <span>{getPercent(counts.Left)}%</span>
-                </div>
-                <div className="absolute right-2 text-xs font-black text-rose-400 flex flex-col items-center">
-                  <span>RIGHT</span>
-                  <span>{getPercent(counts.Right)}%</span>
-                </div>
-                <div className="absolute text-sm font-black text-emerald-400">
-                  {getPercent(counts.Center)}%
-                </div>
-              </div>
-
-              <div className="mt-6 w-full bg-slate-950 rounded-xl p-4 border border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ArrowLeftRight className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs font-bold uppercase text-slate-400">Primary Miss</span>
-                </div>
-                <span className={`font-black text-sm uppercase ${topMissCount > 0 ? 'text-rose-400' : 'text-slate-500'}`}>
-                  {topMissCount > 0 ? topMiss : 'None'}
-                </span>
-              </div>
-              
-              {/* CLEAR DATA BUTTON */}
-              <button 
-                onClick={handleClearData}
-                className="mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-500/10 text-red-500 font-bold text-sm border border-red-500/20 hover:bg-red-500/20 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Clear All Shot Data
-              </button>
-
-            </div>
-          </>
-        )}
+          <div className="flex justify-between mt-2 text-xs font-bold">
+            <span className="text-rose-400">Left: {leftPercent}%</span>
+            <span className="text-amber-400">Right: {rightPercent}%</span>
+          </div>
+        </div>
       </div>
+
+      {/* Hazards Summary */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Bunkers</p>
+            <p className="text-xl font-black text-amber-400">{analytics.bunkersHit}</p>
+          </div>
+          <span className="text-2xl opacity-50">🏖️</span>
+        </div>
+        <div className="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Penalties</p>
+            <p className="text-xl font-black text-rose-500">{analytics.penalties}</p>
+          </div>
+          <span className="text-2xl opacity-50">💧</span>
+        </div>
+      </div>
+
+      {/* Real-World GPS Yardages */}
+      <div className="bg-slate-800 rounded-2xl shadow-lg border border-slate-700 overflow-hidden mt-6">
+        <div className="bg-slate-900 p-4 border-b border-slate-700">
+          <h2 className="text-lg font-black text-white">True Club Yardages</h2>
+          <p className="text-xs text-slate-400">Calculated from GPS shot tracking</p>
+        </div>
+        
+        <div className="divide-y divide-slate-700">
+          {analytics.clubAverages.map(club => (
+            <div key={club.id} className="p-4 flex items-center justify-between">
+              <div>
+                <p className="font-bold text-white">{club.name}</p>
+                <p className="text-[10px] font-semibold text-slate-400">
+                  {club.shotsTracked} shots tracked
+                </p>
+              </div>
+              
+              <div className="text-right">
+                <div className="flex items-end gap-2">
+                  <div className="text-right">
+                    <p className="text-[9px] uppercase text-slate-500 font-bold mb-0.5">Est.</p>
+                    <p className="text-sm font-semibold text-slate-400 line-through">{club.avg_distance}y</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] uppercase text-emerald-500 font-bold mb-0.5">Actual</p>
+                    <p className="text-xl font-black text-emerald-400">
+                      {club.avgActual > 0 ? `${club.avgActual}y` : '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }
