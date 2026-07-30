@@ -26,7 +26,7 @@ function App() {
   const [newRoundCourse, setNewRoundCourse] = useState('Castle Dargan Golf Club');
   const [customCourseName, setCustomCourseName] = useState('');
   
-  const { currentRoundId, currentLat, currentLng, activeHole, setLocation, setActiveHole, setMapTarget } = useGolfStore();
+  const { currentRoundId, currentLat, currentLng, activeHole, setLocation, setActiveHole, setMapTarget, setDeviceHeading } = useGolfStore();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -50,7 +50,7 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Native GPS Tracker
+  // Native GPS Tracker (Optimized for active movement)
   useEffect(() => {
     let watchId;
     const startNativeTracking = async () => {
@@ -61,7 +61,7 @@ function App() {
         }
 
         watchId = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 2000 },
           (position, err) => {
             if (!err && position) {
               setLocation(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
@@ -75,6 +75,29 @@ function App() {
     if (user) startNativeTracking();
     return () => { if (watchId) Geolocation.clearWatch({ id: watchId }); };
   }, [user, setLocation]);
+
+  // Hardware Compass Listener for Dynamic Wind Arrow
+  useEffect(() => {
+    const handleOrientation = (e) => {
+      let heading = null;
+      if (e.webkitCompassHeading) {
+        heading = e.webkitCompassHeading;
+      } else if (e.absolute && e.alpha !== null) {
+        heading = 360 - e.alpha;
+      }
+      if (heading !== null) {
+        setDeviceHeading(heading);
+      }
+    };
+
+    window.addEventListener("deviceorientationabsolute", handleOrientation, true);
+    window.addEventListener("deviceorientation", handleOrientation, true);
+
+    return () => {
+      window.removeEventListener("deviceorientationabsolute", handleOrientation, true);
+      window.removeEventListener("deviceorientation", handleOrientation, true);
+    };
+  }, [setDeviceHeading]);
 
   // Geofencing Auto-Hole Advancement
   useEffect(() => {
@@ -163,7 +186,6 @@ function App() {
         <button onClick={() => supabase.auth.signOut()} className="text-sm font-semibold text-slate-300 hover:text-white bg-slate-700 px-3 py-1 rounded transition-colors">Sign Out</button>
       </header>
 
-      {/* pb-32 ensures content clears the fixed bottom nav bar */}
       <main className="w-full px-3 py-4 max-w-lg mx-auto pb-32">
         {renderTabContent()}
       </main>

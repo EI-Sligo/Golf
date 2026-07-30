@@ -44,25 +44,26 @@ export const calculateDispersion = (startLat, startLng, targetLat, targetLng, en
 };
 
 // --- SMART CADDY AI ---
-
 export const calculatePlaysLike = (directYards, shotBearing, windSpeed, windDirDeg, elevationFeet) => {
   if (!directYards) return 0;
   
-  // If relative elevation is not provided or set to 0, exclude it completely
+  // Elevation adjustment (1 yard per 3 feet of relative height change)
   const validElevation = Number(elevationFeet) || 0;
   const elevationAdjustment = validElevation / 3;
   
-  // Wind: Calculate vector of the wind relative to the shot bearing
+  // Wind adjustment scaled proportionally to shot distance 
+  // (A 10mph wind heavily affects a 150y shot, but has minimal impact on a 24y chip)
+  const distanceScaleFactor = Math.max(0.1, directYards / 150);
   const windAngleRad = toRad(windDirDeg - shotBearing);
-  const windAdjustment = (Number(windSpeed) || 0) * Math.cos(windAngleRad) * 1.2; 
+  const rawWindEffect = (Number(windSpeed) || 0) * Math.cos(windAngleRad) * 1.2;
+  const windAdjustment = rawWindEffect * distanceScaleFactor; 
   
-  return Math.round(directYards + elevationAdjustment + windAdjustment);
+  return Math.max(1, Math.round(directYards + elevationAdjustment + windAdjustment));
 };
 
 export const getRecommendedClub = (playsLikeYards, clubs) => {
   if (!clubs || clubs.length === 0 || playsLikeYards === 0) return "No Clubs";
   
-  // Find the club with an avg_distance closest to the playsLike distance
   const closest = clubs.reduce((prev, curr) => {
     return (Math.abs(curr.avg_distance - playsLikeYards) < Math.abs(prev.avg_distance - playsLikeYards) ? curr : prev);
   });

@@ -19,6 +19,7 @@ export default function HeroDistanceCard() {
     windSpeed, 
     windDir, 
     elevation, 
+    deviceHeading,
     setWindSpeed, 
     setWindDir, 
     setElevation, 
@@ -57,6 +58,9 @@ export default function HeroDistanceCard() {
     
   const playsLike = calculatePlaysLike(activeDistance, shotBearing, windSpeed, windDir, elevation);
   const recommendedClub = getRecommendedClub(playsLike, clubs);
+
+  // Dynamic relative wind arrow calculation (Wind direction relative to where the phone is pointing)
+  const relativeWindArrow = windDir - deviceHeading;
 
   return (
     <div className="space-y-4">
@@ -134,14 +138,14 @@ export default function HeroDistanceCard() {
               />
             </div>
             
-            {/* Wind Direction with Rotating Visual Arrow */}
+            {/* Wind Direction with Relative Compass Arrow */}
             <div className="bg-slate-900 rounded-xl p-2.5 border border-slate-700 text-center">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <p className="text-[9px] text-slate-400 uppercase font-bold">Dir (°)</p>
                 <span 
                   className="text-sky-400 text-xs inline-block transition-transform duration-300 font-black" 
-                  style={{ transform: `rotate(${windDir}deg)` }}
-                  title="Wind Direction Arrow"
+                  style={{ transform: `rotate(${relativeWindArrow}deg)` }}
+                  title="Compass Relative Wind Direction"
                 >
                   ⬇
                 </span>

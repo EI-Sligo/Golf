@@ -13,14 +13,15 @@ export const useGolfStore = create(
       currentLat: null,
       currentLng: null,
       gpsAccuracy: null,
+      deviceHeading: 0,
       
       windSpeed: 0,
       windDir: 0,
       temperature: 15,
-      elevation: 0, // Defaults to 0 so it is excluded if no relative elevation data is recorded
+      elevation: 0, 
       isFetchingWeather: false,
       
-      greenElevations: {}, // Stores recorded elevations per hole { 1: 150, 2: 140, etc. }
+      greenElevations: {}, 
       
       currentRoundId: null,
       clubs: [],
@@ -37,6 +38,7 @@ export const useGolfStore = create(
 
       setScoreModalOpen: (isOpen) => set({ isScoreModalOpen: isOpen }),
       setUserHandicap: (hdcp) => set({ userHandicap: hdcp }),
+      setDeviceHeading: (heading) => set({ deviceHeading: heading }),
       
       setScore: (hole, strokes, putts, fairway) => set((state) => ({ 
         scores: { 
@@ -74,7 +76,17 @@ export const useGolfStore = create(
         
         try {
           const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m&elevation=nan`);
+          
+          if (!res.ok) {
+            throw new Error(`Weather API returned status: ${res.status}`);
+          }
+
           const data = await res.json();
+          
+          if (!data || data.elevation === undefined) {
+            throw new Error("Invalid elevation data received");
+          }
+
           const altitudeFeet = Math.round(data.elevation * 3.28084);
           
           set((prev) => ({
@@ -83,7 +95,7 @@ export const useGolfStore = create(
           alert(`Green ${state.activeHole} elevation recorded successfully (${altitudeFeet} ft)`);
         } catch (error) {
           console.error("Green Elevation Error: ", error);
-          alert("Failed to record green elevation.");
+          alert("Failed to record green elevation. The weather service might be temporarily unavailable.");
         }
       },
 
@@ -97,7 +109,16 @@ export const useGolfStore = create(
         
         try {
           const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m,wind_speed_10m,wind_direction_10m&wind_speed_unit=mph`);
+          
+          if (!res.ok) {
+            throw new Error(`Weather API returned status: ${res.status}`);
+          }
+
           const data = await res.json();
+          
+          if (!data || !data.current) {
+            throw new Error("Invalid weather data received");
+          }
           
           set({
             windSpeed: Math.round(data.current.wind_speed_10m),
@@ -107,6 +128,7 @@ export const useGolfStore = create(
           });
         } catch (error) {
           console.error("Weather Fetch Error: ", error);
+          alert("Could not fetch live weather. The service might be temporarily unavailable.");
           set({ isFetchingWeather: false });
         }
       },

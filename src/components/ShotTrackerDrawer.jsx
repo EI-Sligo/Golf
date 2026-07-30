@@ -1,114 +1,130 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
 import { useGolfStore } from '../store/useGolfStore';
-import { calculateDistance, calculateDispersion } from '../lib/golfMath';
+import { supabase } from '../lib/supabase';
+import { calculateDistance } from '../lib/golfMath';
+import { courseData } from '../lib/courseData';
 
 export default function ShotTrackerDrawer() {
-  const { currentLat, currentLng, mapTarget, activeShot, startTrackingShot, endTrackingShot, clubs, currentRoundId } = useGolfStore();
+  const { 
+    currentLat, 
+    currentLng, 
+    activeShot, 
+    startTrackingShot, 
+    endTrackingShot, 
+    clubs, 
+    currentRoundId, 
+    activeHole, 
+    mapTarget 
+  } = useGolfStore();
+  
   const [selectedClub, setSelectedClub] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleStartShot = () => {
-    if (!currentLat) {
-      alert("GPS is still locating you. Please wait a moment.");
-      return;
-    }
-    if (!mapTarget) {
-      alert("Please tap the map to select a target line first.");
-      return;
-    }
-    if (!selectedClub) {
-      alert("Please select a club.");
-      return;
-    }
+  // Live walking distance calculation
+  const liveDistance = (activeShot && currentLat)
+    ? calculateDistance(activeShot.startLat, activeShot.startLng, currentLat, currentLng)
+    : 0;
+
+  const handleStart = () => {
+    if (!selectedClub) return alert('Please select a club to track.');
+    if (!currentLat) return alert('Waiting for GPS lock...');
+
+    const hole = courseData[activeHole];
+    
+    // Safely assign target to the pin if user hasn't explicitly set a map layup target
+    const targetLat = mapTarget ? mapTarget.lat : hole?.pin?.lat;
+    const targetLng = mapTarget ? mapTarget.lng : hole?.pin?.lng;
 
     startTrackingShot({
       startLat: currentLat,
       startLng: currentLng,
-      targetLat: mapTarget.lat,
-      targetLng: mapTarget.lng,
-      clubId: selectedClub
+      targetLat: targetLat,
+      targetLng: targetLng,
+      club_id: selectedClub
     });
   };
 
-  const handleEndShot = async () => {
-    if (!currentLat) return;
-    setIsProcessing(true);
-
-    const distance = calculateDistance(activeShot.startLat, activeShot.startLng, currentLat, currentLng);
-    const offline = calculateDispersion(activeShot.startLat, activeShot.startLng, activeShot.targetLat, activeShot.targetLng, currentLat, currentLng);
-
-    const { data: { user } } = await supabase.auth.getUser();
-
-    const { data, error } = await supabase.from('shots').insert([{
-      user_id: user.id,
-      round_id: currentRoundId,
-      club_id: activeShot.clubId,
-      distance: distance,
-      offline_yards: offline,
-      lat: activeShot.startLat,
-      lng: activeShot.startLng
-    }]).select();
-
-    if (error) {
-      alert("Error saving shot: " + error.message);
-    } else {
-      useGolfStore.setState((state) => ({ shots: [...state.shots, data[0]] }));
+  const handleEnd = async () => {
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
       
-      const dirText = offline > 0 ? 'Right' : offline < 0 ? 'Left' : 'Dead Center';
-      alert(`Shot recorded!\nDistance: ${distance} yards\nDispersion: ${Math.abs(offline)} yards ${dirText}`);
-      
-      endTrackingShot();
-      setSelectedClub('');
+      // Fixed: Now correctly sends 'hole_number' to prevent database constraints errors
+      const { error } = await supabase.from('shots').insert([{
+        user_id: user.id,
+        round_id: currentRoundId,
+        hole_number: activeHole,
+        club_id: activeShot.club_id,
+        start_lat: activeShot.startLat,
+        start_lng: activeShot.startLng,
+        target_lat: activeShot.targetLat,
+        target_lng: activeShot.targetLng,
+        distance: liveDistance
+      }]);
+
+      if (error) {
+        alert(`Error saving shot: ${error.message}`);
+      } else {
+        endTrackingShot();
+        setSelectedClub('');
+      }
+    } catch (err) {
+      alert('Failed to save shot to database.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsProcessing(false);
   };
 
   if (!currentRoundId) return null;
 
   return (
     <div className="bg-slate-800 p-5 rounded-2xl shadow-lg border border-slate-700">
-      <h2 className="text-xl font-bold text-emerald-400 mb-4">Shot Tracker</h2>
+      <h3 className="text-lg font-bold text-emerald-400 mb-4">Shot Tracker</h3>
       
       {!activeShot ? (
         <div className="space-y-4">
           <select 
-            className="w-full bg-slate-900 p-3 rounded-lg text-white border border-slate-600 focus:border-emerald-500 focus:outline-none"
-            value={selectedClub} onChange={(e) => setSelectedClub(e.target.value)}
+            value={selectedClub} 
+            onChange={(e) => setSelectedClub(e.target.value)}
+            className="w-full bg-slate-900 p-3 rounded-xl text-white border border-slate-700 focus:border-emerald-500 focus:outline-none"
           >
-            <option value="" disabled>Select Club</option>
-            {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="">Select Club</option>
+            {clubs.map(club => (
+              <option key={club.id} value={club.id}>{club.name}</option>
+            ))}
           </select>
+          
           <button 
-            onClick={handleStartShot}
-            className="w-full bg-emerald-500 text-slate-900 font-bold py-3 rounded-lg hover:bg-emerald-400 transition-colors"
+            onClick={handleStart}
+            className="w-full bg-emerald-500 text-slate-900 font-bold py-3 rounded-xl hover:bg-emerald-400 transition-colors"
           >
             Mark Shot Start
           </button>
         </div>
       ) : (
-        <div className="space-y-4 text-center">
-          <div className="p-4 bg-slate-900 rounded-xl border border-emerald-500/30">
-            <p className="text-emerald-400 font-bold animate-pulse">Tracking Shot...</p>
-            <p className="text-sm text-slate-400 mt-1">Walk to your ball to record distance.</p>
-            {currentLat && (
-                <p className="text-2xl font-black text-white mt-3">
-                    {calculateDistance(activeShot.startLat, activeShot.startLng, currentLat, currentLng)} <span className="text-sm text-slate-400 font-normal">yds</span>
-                </p>
-            )}
+        <div className="space-y-4">
+          <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 text-center">
+            <p className="text-emerald-400 font-bold mb-2">Tracking Shot...</p>
+            <p className="text-slate-400 text-sm mb-4">Walk to your ball to record distance.</p>
+            <div className="flex items-baseline justify-center gap-1">
+              <span className="text-5xl font-black text-white">{liveDistance}</span>
+              <span className="text-slate-400 font-bold">yds</span>
+            </div>
           </div>
+          
           <div className="flex gap-3">
             <button 
               onClick={endTrackingShot}
-              className="w-1/3 bg-slate-700 text-white font-bold py-3 rounded-lg hover:bg-slate-600 transition-colors"
+              className="flex-1 bg-slate-700 text-white font-bold py-3 rounded-xl hover:bg-slate-600 transition-colors"
             >
               Cancel
             </button>
             <button 
-              onClick={handleEndShot} disabled={isProcessing}
-              className="w-2/3 bg-emerald-500 text-slate-900 font-bold py-3 rounded-lg hover:bg-emerald-400 transition-colors disabled:opacity-50"
+              onClick={handleEnd}
+              disabled={isSaving}
+              className="flex-[2] bg-emerald-500 text-slate-900 font-bold py-3 rounded-xl hover:bg-emerald-400 transition-colors disabled:opacity-50"
             >
-              {isProcessing ? 'Saving...' : 'Record Shot End'}
+              {isSaving ? 'Saving...' : 'Record Shot End'}
             </button>
           </div>
         </div>
