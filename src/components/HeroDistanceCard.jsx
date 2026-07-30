@@ -28,7 +28,8 @@ export default function HeroDistanceCard() {
     isFetchingWeather,
     mapTarget,
     setMapTarget,
-    recordGreenElevation
+    recordGreenElevation,
+    scores // Brought in scores to calculate relative round score
   } = useGolfStore();
 
   const hole = courseData[activeHole];
@@ -59,14 +60,34 @@ export default function HeroDistanceCard() {
   const playsLike = calculatePlaysLike(activeDistance, shotBearing, windSpeed, windDir, elevation);
   const recommendedClub = getRecommendedClub(playsLike, clubs);
 
-  // Dynamic relative wind arrow calculation (Wind direction relative to where the phone is pointing)
   const relativeWindArrow = windDir - deviceHeading;
+
+  // Calculate Relative Round Score (+2, -1, E) based on holes actually played
+  let totalStrokes = 0;
+  let totalParPlayed = 0;
+
+  Object.keys(scores).forEach(holeKey => {
+    const s = scores[holeKey];
+    if (s && s.strokes) {
+      totalStrokes += s.strokes;
+      totalParPlayed += courseData[holeKey]?.par || 0;
+    }
+  });
+
+  let relativeScoreStr = "E";
+  if (totalStrokes > 0 && totalParPlayed > 0) {
+    const diff = totalStrokes - totalParPlayed;
+    if (diff > 0) relativeScoreStr = `+${diff}`;
+    else if (diff < 0) relativeScoreStr = `${diff}`;
+  }
+  
+  const scoreColor = relativeScoreStr === "E" ? "text-emerald-400" : relativeScoreStr.startsWith("+") ? "text-rose-400" : "text-sky-400";
 
   return (
     <div className="space-y-4">
       <div className="bg-slate-800 p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-700">
         
-        {/* Header - Hole Navigation */}
+        {/* Header - Hole Navigation & Relative Score */}
         <div className="flex justify-between items-center mb-4">
           <button 
             onClick={() => { setActiveHole(Math.max(1, activeHole - 1)); setMapTarget(null); }} 
@@ -75,8 +96,16 @@ export default function HeroDistanceCard() {
             &#8592;
           </button>
           
-          <div className="text-center">
-            <h2 className="text-4xl sm:text-5xl font-black text-emerald-400 leading-none">{activeHole}</h2>
+          <div className="text-center flex flex-col items-center">
+            {/* Dynamic Relative Score Badge */}
+            {totalStrokes > 0 && (
+              <div className="inline-block bg-slate-900 border border-slate-700 px-3 py-1 rounded-full mb-1 shadow-sm">
+                <span className="text-[9px] text-slate-400 font-bold uppercase mr-1.5 tracking-wider">Round</span>
+                <span className={`text-xs font-black ${scoreColor}`}>{relativeScoreStr}</span>
+              </div>
+            )}
+
+            <h2 className="text-4xl sm:text-5xl font-black text-emerald-400 leading-none mt-1">{activeHole}</h2>
             <p className="text-slate-400 uppercase tracking-widest text-[10px] font-bold mt-1">
               Par {hole?.par || '-'} | SI {hole?.strokeIndex || '-'}
             </p>

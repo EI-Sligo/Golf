@@ -26,8 +26,13 @@ function App() {
   const [newRoundCourse, setNewRoundCourse] = useState('Castle Dargan Golf Club');
   const [customCourseName, setCustomCourseName] = useState('');
   
-  const { currentRoundId, currentLat, currentLng, activeHole, setLocation, setActiveHole, setMapTarget, setDeviceHeading } = useGolfStore();
+  const { 
+    currentRoundId, currentLat, currentLng, activeHole, 
+    setLocation, setActiveHole, setMapTarget, setDeviceHeading,
+    isOnline, syncQueue, setOnlineStatus, processSyncQueue
+  } = useGolfStore();
 
+  // Authentication & Initial Data Fetch
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
@@ -49,6 +54,25 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Offline/Online Network Listeners
+  useEffect(() => {
+    const handleOnline = () => setOnlineStatus(true);
+    const handleOffline = () => setOnlineStatus(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Initial check on load
+    if (navigator.onLine) {
+      setOnlineStatus(true);
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [setOnlineStatus]);
 
   // Native GPS Tracker (Optimized for active movement)
   useEffect(() => {
@@ -128,6 +152,12 @@ function App() {
                 if (!finalCourseName) return;
 
                 const { data: { user } } = await supabase.auth.getUser();
+                
+                if (!isOnline) {
+                   alert("You must be online to create a new round.");
+                   return;
+                }
+
                 const { data } = await supabase.from('rounds').insert([{ user_id: user.id, course_name: finalCourseName }]).select();
                 
                 if (data) {
@@ -180,13 +210,24 @@ function App() {
   if (!user) return <Auth />;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white relative">
+    <div className="min-h-screen bg-slate-900 text-white relative flex flex-col">
       <header className="p-4 bg-slate-800 shadow-md flex justify-between items-center sticky top-0 z-40">
         <h1 className="text-xl font-bold text-emerald-400">Golf Caddy</h1>
         <button onClick={() => supabase.auth.signOut()} className="text-sm font-semibold text-slate-300 hover:text-white bg-slate-700 px-3 py-1 rounded transition-colors">Sign Out</button>
       </header>
 
-      <main className="w-full px-3 py-4 max-w-lg mx-auto pb-32">
+      {/* Offline / Sync Indicator */}
+      {(!isOnline || syncQueue.length > 0) && (
+        <div className={`w-full py-1.5 px-4 text-[10px] font-bold uppercase tracking-wider text-center flex justify-center items-center gap-2 ${!isOnline ? 'bg-amber-500/20 text-amber-400 border-b border-amber-500/20' : 'bg-sky-500/20 text-sky-400 border-b border-sky-500/20'}`}>
+          {!isOnline ? (
+            <><span>⚠️</span> Offline: {syncQueue.length} items queued</>
+          ) : (
+            <><span>↻</span> Syncing {syncQueue.length} items...</>
+          )}
+        </div>
+      )}
+
+      <main className="w-full px-3 py-4 max-w-lg mx-auto pb-32 flex-1">
         {renderTabContent()}
       </main>
 

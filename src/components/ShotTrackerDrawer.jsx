@@ -11,6 +11,7 @@ export default function ShotTrackerDrawer() {
     activeShot, 
     startTrackingShot, 
     endTrackingShot, 
+    saveTrackedShot,
     clubs, 
     currentRoundId, 
     activeHole, 
@@ -18,7 +19,6 @@ export default function ShotTrackerDrawer() {
   } = useGolfStore();
   
   const [selectedClub, setSelectedClub] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
 
   // Live walking distance calculation
   const liveDistance = (activeShot && currentLat)
@@ -30,8 +30,6 @@ export default function ShotTrackerDrawer() {
     if (!currentLat) return alert('Waiting for GPS lock...');
 
     const hole = courseData[activeHole];
-    
-    // Safely assign target to the pin if user hasn't explicitly set a map layup target
     const targetLat = mapTarget ? mapTarget.lat : hole?.pin?.lat;
     const targetLng = mapTarget ? mapTarget.lng : hole?.pin?.lng;
 
@@ -45,40 +43,31 @@ export default function ShotTrackerDrawer() {
   };
 
   const handleEnd = async () => {
-    setIsSaving(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Find the club name string to satisfy the legacy "club" NOT NULL database constraint
-      const selectedClubObj = clubs.find(c => c.id === activeShot.club_id);
-      const clubName = selectedClubObj ? selectedClubObj.name : 'Unknown Club';
+    const { data: { user } } = await supabase.auth.getUser();
+    const selectedClubObj = clubs.find(c => c.id === activeShot.club_id);
+    const clubName = selectedClubObj ? selectedClubObj.name : 'Unknown Club';
 
-      const { error } = await supabase.from('shots').insert([{
-        user_id: user.id,
-        round_id: currentRoundId,
-        hole_number: activeHole,
-        club_id: activeShot.club_id,
-        club: clubName, // Fixes the "null value in column 'club'" error
-        start_lat: activeShot.startLat,
-        start_lng: activeShot.startLng,
-        target_lat: activeShot.targetLat,
-        target_lng: activeShot.targetLng,
-        lat: currentLat, // Saves the final ball resting latitude
-        lng: currentLng, // Saves the final ball resting longitude
-        distance: liveDistance
-      }]);
+    // Construct the payload exactly as the database expects it
+    const shotPayload = {
+      user_id: user.id,
+      round_id: currentRoundId,
+      hole_number: activeHole,
+      club_id: activeShot.club_id,
+      club: clubName,
+      start_lat: activeShot.startLat,
+      start_lng: activeShot.startLng,
+      target_lat: activeShot.targetLat,
+      target_lng: activeShot.targetLng,
+      lat: currentLat,
+      lng: currentLng,
+      distance: liveDistance
+    };
 
-      if (error) {
-        alert(`Error saving shot: ${error.message}`);
-      } else {
-        endTrackingShot();
-        setSelectedClub('');
-      }
-    } catch (err) {
-      alert('Failed to save shot to database.');
-    } finally {
-      setIsSaving(false);
-    }
+    // Pass to the store for optimistic UI & background sync
+    saveTrackedShot(shotPayload);
+    
+    endTrackingShot();
+    setSelectedClub('');
   };
 
   if (!currentRoundId) return null;
@@ -127,10 +116,9 @@ export default function ShotTrackerDrawer() {
             </button>
             <button 
               onClick={handleEnd}
-              disabled={isSaving}
-              className="flex-[2] bg-emerald-500 text-slate-900 font-bold py-3 rounded-xl hover:bg-emerald-400 transition-colors disabled:opacity-50"
+              className="flex-[2] bg-emerald-500 text-slate-900 font-bold py-3 rounded-xl hover:bg-emerald-400 transition-colors"
             >
-              {isSaving ? 'Saving...' : 'Record Shot End'}
+              Record Shot End
             </button>
           </div>
         </div>

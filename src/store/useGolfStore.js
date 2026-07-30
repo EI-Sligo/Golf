@@ -30,6 +30,50 @@ export const useGolfStore = create(
       mapTarget: null,
       activeShot: null,
 
+      // --- Offline Sync State ---
+      isOnline: navigator.onLine,
+      syncQueue: [], 
+      
+      setOnlineStatus: (status) => {
+        set({ isOnline: status });
+        if (status) get().processSyncQueue();
+      },
+
+      addToSyncQueue: (task) => set((state) => ({ 
+        syncQueue: [...state.syncQueue, { ...task, queueId: crypto.randomUUID(), timestamp: Date.now() }] 
+      })),
+
+      processSyncQueue: async () => {
+        const state = get();
+        if (!state.isOnline || state.syncQueue.length === 0) return;
+
+        // Create a copy of the queue to process
+        const queueToProcess = [...state.syncQueue];
+        const failedTasks = [];
+
+        for (const task of queueToProcess) {
+          try {
+            if (task.type === 'INSERT_SHOT') {
+              const { error } = await supabase.from('shots').insert([task.payload]);
+              if (error) throw error;
+            } 
+            else if (task.type === 'UPDATE_ROUND') {
+              const { error } = await supabase.from('rounds')
+                .update(task.payload.data)
+                .eq('id', task.payload.id);
+              if (error) throw error;
+            }
+          } catch (err) {
+            console.error("Background sync failed for task:", task, err);
+            failedTasks.push(task); // Keep failed tasks to retry later
+          }
+        }
+        
+        // Update queue with only the tasks that failed
+        set({ syncQueue: failedTasks });
+      },
+      // --------------------------
+
       setActiveHole: (hole) => {
         const state = get();
         const savedElev = state.greenElevations[hole] || 0;
@@ -68,6 +112,18 @@ export const useGolfStore = create(
       startTrackingShot: (shotData) => set({ activeShot: shotData }),
       endTrackingShot: () => set({ activeShot: null, mapTarget: null }),
 
+      saveTrackedShot: async (shotPayload) => {
+        // Optimistic Local Update (shows up in analytics immediately)
+        const localShot = { ...shotPayload, id: crypto.randomUUID() };
+        set(state => ({ shots: [...state.shots, localShot] }));
+
+        // Add to Sync Queue (Handles DB insert in background)
+        get().addToSyncQueue({ type: 'INSERT_SHOT', payload: shotPayload });
+        
+        // Try processing immediately if online
+        get().processSyncQueue();
+      },
+
       recordGreenElevation: async () => {
         const state = get();
         if (!state.currentLat) {
@@ -76,16 +132,9 @@ export const useGolfStore = create(
         
         try {
           const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m&elevation=nan`);
-          
-          if (!res.ok) {
-            throw new Error(`Weather API returned status: ${res.status}`);
-          }
-
+          if (!res.ok) throw new Error(`Weather API returned status: ${res.status}`);
           const data = await res.json();
-          
-          if (!data || data.elevation === undefined) {
-            throw new Error("Invalid elevation data received");
-          }
+          if (!data || data.elevation === undefined) throw new Error("Invalid elevation data received");
 
           const altitudeFeet = Math.round(data.elevation * 3.28084);
           
@@ -109,16 +158,9 @@ export const useGolfStore = create(
         
         try {
           const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m,wind_speed_10m,wind_direction_10m&wind_speed_unit=mph`);
-          
-          if (!res.ok) {
-            throw new Error(`Weather API returned status: ${res.status}`);
-          }
-
+          if (!res.ok) throw new Error(`Weather API returned status: ${res.status}`);
           const data = await res.json();
-          
-          if (!data || !data.current) {
-            throw new Error("Invalid weather data received");
-          }
+          if (!data || !data.current) throw new Error("Invalid weather data received");
           
           set({
             windSpeed: Math.round(data.current.wind_speed_10m),
@@ -177,27 +219,29 @@ export const useGolfStore = create(
           if (s.strokes) total += s.strokes; 
         });
 
-        const { error } = await supabase
-          .from('rounds')
-          .update({ total_score: total, scorecard: state.scores })
-          .eq('id', state.currentRoundId);
+        const roundUpdateData = { total_score: total, scorecard: state.scores };
 
-        if (!error) {
-          set((state) => ({
-            rounds: state.rounds.map(r => 
-              r.id === state.currentRoundId 
-                ? { ...r, total_score: total, scorecard: state.scores } 
-                : r
-            ),
-            currentRoundId: null, 
-            scores: {}, 
-            activeHole: 1, 
-            activeShot: null, 
-            mapTarget: null
-          }));
-        } else {
-          alert("Offline Mode: Data saved locally. Will sync when connection is restored.");
-        }
+        // Optimistic Local Update
+        set((state) => ({
+          rounds: state.rounds.map(r => 
+            r.id === state.currentRoundId 
+              ? { ...r, ...roundUpdateData } 
+              : r
+          ),
+          currentRoundId: null, 
+          scores: {}, 
+          activeHole: 1, 
+          activeShot: null, 
+          mapTarget: null
+        }));
+
+        // Add to Sync Queue
+        get().addToSyncQueue({ 
+          type: 'UPDATE_ROUND', 
+          payload: { id: state.currentRoundId, data: roundUpdateData } 
+        });
+
+        get().processSyncQueue();
       }
     }),
     {
@@ -210,7 +254,8 @@ export const useGolfStore = create(
         activeHole: state.activeHole, 
         scores: state.scores, 
         userHandicap: state.userHandicap,
-        greenElevations: state.greenElevations
+        greenElevations: state.greenElevations,
+        syncQueue: state.syncQueue // Ensure pending uploads survive app restarts
       })
     }
   )
