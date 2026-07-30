@@ -2,14 +2,20 @@
 const offset = (coord, val) => Number((coord + val).toFixed(6));
 
 export const courseData = {
-  1: {
+1: {
     par: 4,
     strokeIndex: 7,
-    tees: [{ lat: 54.197806, lng: -8.435885 }, { lat: 54.197859, lng: -8.435504 }, { lat: 54.197960, lng: -8.434919 }],
+    tees: [{ lat: 54.197806, lng: -8.435885 }],
     pin: { lat: 54.198594, lng: -8.430418 },
     front: { lat: 54.198550, lng: -8.430500 },
     back: { lat: 54.198640, lng: -8.430350 },
-    hazards: [{ type: 'bunker', lat: 54.198400, lng: -8.431000 }]
+    
+    // --- ADD / CUSTOMIZE HAZARDS HERE ---
+    hazards: [
+      { type: 'bunker', lat: 54.19839316429468, lng: -8.432339429855348 }, // Fairway Bunker Left
+      { type: 'bunker', lat: 54.19839316429468, lng: -8.432006835937502 }, // Greenside Bunker Right
+      { type: 'water',  lat: 54.19810445997077, lng: -8.435418605804445}  // Pond / Stream Hazard
+    ]
   },
   2: {
     par: 4,

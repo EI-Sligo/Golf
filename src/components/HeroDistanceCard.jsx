@@ -24,11 +24,14 @@ export default function HeroDistanceCard() {
     setElevation, 
     clubs,
     fetchLiveConditions, 
-    isFetchingWeather
+    isFetchingWeather,
+    mapTarget,
+    setMapTarget
   } = useGolfStore();
 
   const hole = courseData[activeHole];
   
+  // Standard green reference yardages
   const distCenter = (currentLat && hole?.pin) 
     ? calculateDistance(currentLat, currentLng, hole.pin.lat, hole.pin.lng) 
     : 0;
@@ -40,12 +43,21 @@ export default function HeroDistanceCard() {
   const distBack = (currentLat && hole?.back) 
     ? calculateDistance(currentLat, currentLng, hole.back.lat, hole.back.lng) 
     : 0;
+
+  // --- TARGET POINT VS PIN LOGIC ---
+  // If user tapped/dragged a custom map target, calculate distance to THAT target instead of the pin
+  const targetLat = mapTarget ? mapTarget.lat : hole?.pin?.lat;
+  const targetLng = mapTarget ? mapTarget.lng : hole?.pin?.lng;
+
+  const activeDistance = (currentLat && targetLat) 
+    ? calculateDistance(currentLat, currentLng, targetLat, targetLng) 
+    : distCenter;
   
-  const shotBearing = (currentLat && hole?.pin) 
-    ? calculateBearing(currentLat, currentLng, hole.pin.lat, hole.pin.lng) 
+  const shotBearing = (currentLat && targetLat) 
+    ? calculateBearing(currentLat, currentLng, targetLat, targetLng) 
     : 0;
     
-  const playsLike = calculatePlaysLike(distCenter, shotBearing, windSpeed, windDir, elevation);
+  const playsLike = calculatePlaysLike(activeDistance, shotBearing, windSpeed, windDir, elevation);
   const recommendedClub = getRecommendedClub(playsLike, clubs);
 
   return (
@@ -55,7 +67,7 @@ export default function HeroDistanceCard() {
         {/* Header - Hole Navigation */}
         <div className="flex justify-between items-center mb-4">
           <button 
-            onClick={() => setActiveHole(Math.max(1, activeHole - 1))} 
+            onClick={() => { setActiveHole(Math.max(1, activeHole - 1)); setMapTarget(null); }} 
             className="w-10 h-10 bg-slate-700 rounded-full font-bold text-white hover:bg-slate-600 transition-colors flex items-center justify-center"
           >
             &#8592;
@@ -69,7 +81,7 @@ export default function HeroDistanceCard() {
           </div>
 
           <button 
-            onClick={() => setActiveHole(Math.min(18, activeHole + 1))} 
+            onClick={() => { setActiveHole(Math.min(18, activeHole + 1)); setMapTarget(null); }} 
             className="w-10 h-10 bg-slate-700 rounded-full font-bold text-white hover:bg-slate-600 transition-colors flex items-center justify-center"
           >
             &#8594;
@@ -83,7 +95,7 @@ export default function HeroDistanceCard() {
             <h3 className="text-xl sm:text-2xl font-bold text-white">{distFront}</h3>
           </div>
           <div className="text-center pb-1">
-            <p className="text-emerald-400 text-[9px] sm:text-[10px] uppercase font-bold tracking-widest mb-1">Center</p>
+            <p className="text-emerald-400 text-[9px] sm:text-[10px] uppercase font-bold tracking-widest mb-1">Center Pin</p>
             <h2 className="text-4xl sm:text-5xl font-black text-white">{distCenter}</h2>
           </div>
           <div className="text-center opacity-70">
@@ -92,7 +104,7 @@ export default function HeroDistanceCard() {
           </div>
         </div>
 
-        {/* Weather / Conditions Grid (Fixes Overflow) */}
+        {/* Weather / Conditions Grid */}
         <div className="mb-5">
           <div className="flex justify-between items-center mb-2">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conditions</p>
@@ -136,13 +148,23 @@ export default function HeroDistanceCard() {
           </div>
         </div>
 
-        {/* Smart Caddy AI Recommendation */}
+        {/* Smart Caddy AI Recommendation (Dynamic to Target vs Pin) */}
         <div className="bg-emerald-500/10 border border-emerald-500/30 p-3.5 sm:p-4 rounded-xl flex justify-between items-center mb-5">
-          <div>
-            <p className="text-[10px] text-emerald-500 uppercase font-bold tracking-widest mb-1">
-              Plays Like <span className="text-white text-base sm:text-lg ml-1">{playsLike}y</span>
-            </p>
-            <p className="text-base sm:text-lg font-bold text-emerald-400">{recommendedClub}</p>
+          <div className="overflow-hidden pr-2">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <p className="text-[10px] text-emerald-500 uppercase font-bold tracking-widest">
+                Plays Like ({mapTarget ? 'Target' : 'Pin'}): <span className="text-white text-base sm:text-lg ml-1">{playsLike}y</span>
+              </p>
+              {mapTarget && (
+                <button 
+                  onClick={() => setMapTarget(null)}
+                  className="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded border border-rose-500/30 hover:bg-rose-500/30 transition-colors"
+                >
+                  Clear Target
+                </button>
+              )}
+            </div>
+            <p className="text-base sm:text-lg font-bold text-emerald-400 truncate">{recommendedClub}</p>
           </div>
           <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center text-slate-900 font-black shrink-0">
             AI
