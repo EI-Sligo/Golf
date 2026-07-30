@@ -4,7 +4,7 @@ export const toRad = (degrees) => (degrees * Math.PI) / 180;
 export const toDeg = (radians) => (radians * 180) / Math.PI;
 
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  if (!lat1 || !lon1 || !lat2 || !lon2 || (lat1 === 0 && lon1 === 0)) return 0;
   
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
@@ -19,7 +19,7 @@ export const calculateDistance = (lat1, lon1, lat2, lon2) => {
 };
 
 export const calculateBearing = (lat1, lon1, lat2, lon2) => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  if (!lat1 || !lon1 || !lat2 || !lon2 || (lat1 === 0 && lon1 === 0)) return 0;
   
   const phi1 = toRad(lat1);
   const phi2 = toRad(lat2);
@@ -33,6 +33,8 @@ export const calculateBearing = (lat1, lon1, lat2, lon2) => {
 };
 
 export const calculateDispersion = (startLat, startLng, targetLat, targetLng, endLat, endLng) => {
+  if (!startLat || !startLng || !targetLat || !targetLng || !endLat || !endLng) return 0;
+  
   const d13 = calculateDistance(startLat, startLng, endLat, endLng) / R_YARDS; 
   const theta13 = toRad(calculateBearing(startLat, startLng, endLat, endLng));
   const theta12 = toRad(calculateBearing(startLat, startLng, targetLat, targetLng));
@@ -46,13 +48,13 @@ export const calculateDispersion = (startLat, startLng, targetLat, targetLng, en
 export const calculatePlaysLike = (directYards, shotBearing, windSpeed, windDirDeg, elevationFeet) => {
   if (!directYards) return 0;
   
-  // Elevation: roughly +/- 1 yard for every 3 feet of elevation change
-  const elevationAdjustment = elevationFeet / 3;
+  // If relative elevation is not provided or set to 0, exclude it completely
+  const validElevation = Number(elevationFeet) || 0;
+  const elevationAdjustment = validElevation / 3;
   
-  // Wind: Calculate the vector of the wind relative to the shot bearing
-  // If wind is coming from the exact same direction as the shot (headwind), cos(0) = 1
+  // Wind: Calculate vector of the wind relative to the shot bearing
   const windAngleRad = toRad(windDirDeg - shotBearing);
-  const windAdjustment = windSpeed * Math.cos(windAngleRad) * 1.2; 
+  const windAdjustment = (Number(windSpeed) || 0) * Math.cos(windAngleRad) * 1.2; 
   
   return Math.round(directYards + elevationAdjustment + windAdjustment);
 };

@@ -26,7 +26,8 @@ export default function HeroDistanceCard() {
     fetchLiveConditions, 
     isFetchingWeather,
     mapTarget,
-    setMapTarget
+    setMapTarget,
+    recordGreenElevation
   } = useGolfStore();
 
   const hole = courseData[activeHole];
@@ -43,9 +44,8 @@ export default function HeroDistanceCard() {
   const distBack = (currentLat && hole?.back) 
     ? calculateDistance(currentLat, currentLng, hole.back.lat, hole.back.lng) 
     : 0;
-
-  // --- TARGET POINT VS PIN LOGIC ---
-  // If user tapped/dragged a custom map target, calculate distance to THAT target instead of the pin
+  
+  // Use custom map target if active, otherwise default to the hole pin
   const targetLat = mapTarget ? mapTarget.lat : hole?.pin?.lat;
   const targetLng = mapTarget ? mapTarget.lng : hole?.pin?.lng;
 
@@ -89,7 +89,7 @@ export default function HeroDistanceCard() {
         </div>
 
         {/* Front / Center / Back Yardages */}
-        <div className="flex justify-between items-end bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-700 mb-5">
+        <div className="flex justify-between items-end bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-700 mb-4">
           <div className="text-center opacity-70">
             <p className="text-slate-400 text-[9px] sm:text-[10px] uppercase font-bold tracking-widest mb-1">Front</p>
             <h3 className="text-xl sm:text-2xl font-bold text-white">{distFront}</h3>
@@ -104,6 +104,14 @@ export default function HeroDistanceCard() {
           </div>
         </div>
 
+        {/* Record Green Elevation Button */}
+        <button 
+          onClick={recordGreenElevation}
+          className="w-full mb-4 bg-purple-500/20 text-purple-300 border border-purple-500/30 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-purple-500/30 transition-colors flex items-center justify-center gap-2"
+        >
+          📍 Record Green Elevation (When on Green)
+        </button>
+
         {/* Weather / Conditions Grid */}
         <div className="mb-5">
           <div className="flex justify-between items-center mb-2">
@@ -113,7 +121,7 @@ export default function HeroDistanceCard() {
               disabled={isFetchingWeather} 
               className="text-[10px] bg-sky-500/20 text-sky-400 px-2 py-1 rounded font-bold uppercase tracking-wider border border-sky-500/30 hover:bg-sky-500/30 transition-colors disabled:opacity-50"
             >
-              {isFetchingWeather ? 'Fetching...' : 'Auto-Fetch API'}
+              {isFetchingWeather ? 'Fetching...' : 'Auto-Fetch Weather'}
             </button>
           </div>
           
@@ -137,7 +145,7 @@ export default function HeroDistanceCard() {
               />
             </div>
             <div className="bg-slate-900 rounded-xl p-2.5 border border-slate-700 text-center">
-              <p className="text-[9px] text-slate-400 uppercase font-bold mb-1">Elev (ft)</p>
+              <p className="text-[9px] text-slate-400 uppercase font-bold mb-1">Elev Diff (ft)</p>
               <input 
                 type="number" 
                 className="w-full bg-transparent text-white font-bold text-center text-sm focus:outline-none" 
@@ -148,7 +156,7 @@ export default function HeroDistanceCard() {
           </div>
         </div>
 
-        {/* Smart Caddy AI Recommendation (Dynamic to Target vs Pin) */}
+        {/* Smart Caddy AI Recommendation */}
         <div className="bg-emerald-500/10 border border-emerald-500/30 p-3.5 sm:p-4 rounded-xl flex justify-between items-center mb-5">
           <div className="overflow-hidden pr-2">
             <div className="flex items-center gap-2 mb-1 flex-wrap">

@@ -17,8 +17,10 @@ export const useGolfStore = create(
       windSpeed: 0,
       windDir: 0,
       temperature: 15,
-      elevation: 0,
+      elevation: 0, // Defaults to 0 so it is excluded if no relative elevation data is recorded
       isFetchingWeather: false,
+      
+      greenElevations: {}, // Stores recorded elevations per hole { 1: 150, 2: 140, etc. }
       
       currentRoundId: null,
       clubs: [],
@@ -27,7 +29,12 @@ export const useGolfStore = create(
       mapTarget: null,
       activeShot: null,
 
-      setActiveHole: (hole) => set({ activeHole: hole }),
+      setActiveHole: (hole) => {
+        const state = get();
+        const savedElev = state.greenElevations[hole] || 0;
+        set({ activeHole: hole, elevation: savedElev });
+      },
+
       setScoreModalOpen: (isOpen) => set({ isScoreModalOpen: isOpen }),
       setUserHandicap: (hdcp) => set({ userHandicap: hdcp }),
       
@@ -59,7 +66,27 @@ export const useGolfStore = create(
       startTrackingShot: (shotData) => set({ activeShot: shotData }),
       endTrackingShot: () => set({ activeShot: null, mapTarget: null }),
 
-      // OPEN-METEO API INTEGRATION (No API Key Required)
+      recordGreenElevation: async () => {
+        const state = get();
+        if (!state.currentLat) {
+          return alert("Waiting for GPS signal...");
+        }
+        
+        try {
+          const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m&elevation=nan`);
+          const data = await res.json();
+          const altitudeFeet = Math.round(data.elevation * 3.28084);
+          
+          set((prev) => ({
+            greenElevations: { ...prev.greenElevations, [state.activeHole]: altitudeFeet }
+          }));
+          alert(`Green ${state.activeHole} elevation recorded successfully (${altitudeFeet} ft)`);
+        } catch (error) {
+          console.error("Green Elevation Error: ", error);
+          alert("Failed to record green elevation.");
+        }
+      },
+
       fetchLiveConditions: async () => {
         const state = get();
         if (!state.currentLat) {
@@ -69,14 +96,13 @@ export const useGolfStore = create(
         set({ isFetchingWeather: true });
         
         try {
-          const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m,wind_speed_10m,wind_direction_10m&elevation=nan&wind_speed_unit=mph`);
+          const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m,wind_speed_10m,wind_direction_10m&wind_speed_unit=mph`);
           const data = await res.json();
           
           set({
             windSpeed: Math.round(data.current.wind_speed_10m),
             windDir: data.current.wind_direction_10m,
             temperature: Math.round(data.current.temperature_2m),
-            elevation: Math.round(data.elevation * 3.28084), // Convert Meters to Feet
             isFetchingWeather: false
           });
         } catch (error) {
@@ -161,7 +187,8 @@ export const useGolfStore = create(
         currentRoundId: state.currentRoundId, 
         activeHole: state.activeHole, 
         scores: state.scores, 
-        userHandicap: state.userHandicap 
+        userHandicap: state.userHandicap,
+        greenElevations: state.greenElevations
       })
     }
   )
