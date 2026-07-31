@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useGolfStore } from '../store/useGolfStore';
 import { supabase } from '../lib/supabase';
-import { calculateDistance } from '../lib/golfMath';
+import { calculateDistance, calculateDispersion } from '../lib/golfMath';
 import { courseData } from '../lib/courseData';
 
 export default function ShotTrackerDrawer() {
@@ -20,7 +20,6 @@ export default function ShotTrackerDrawer() {
   
   const [selectedClub, setSelectedClub] = useState('');
 
-  // Live walking distance calculation
   const liveDistance = (activeShot && currentLat)
     ? calculateDistance(activeShot.startLat, activeShot.startLng, currentLat, currentLng)
     : 0;
@@ -47,7 +46,18 @@ export default function ShotTrackerDrawer() {
     const selectedClubObj = clubs.find(c => c.id === activeShot.club_id);
     const clubName = selectedClubObj ? selectedClubObj.name : 'Unknown Club';
 
-    // Construct the payload exactly as the database expects it
+    // Calculate accuracy tag on the fly to satisfy DB constraint
+    let accuracyTag = 'Straight';
+    if (activeShot.targetLat && activeShot.targetLng) {
+      const dev = calculateDispersion(
+        activeShot.startLat, activeShot.startLng, 
+        activeShot.targetLat, activeShot.targetLng, 
+        currentLat, currentLng
+      );
+      if (dev < -7) accuracyTag = 'Left';
+      else if (dev > 7) accuracyTag = 'Right';
+    }
+
     const shotPayload = {
       user_id: user.id,
       round_id: currentRoundId,
@@ -60,12 +70,11 @@ export default function ShotTrackerDrawer() {
       target_lng: activeShot.targetLng,
       lat: currentLat,
       lng: currentLng,
-      distance: liveDistance
+      distance: liveDistance,
+      accuracy: accuracyTag // FIXED
     };
 
-    // Pass to the store for optimistic UI & background sync
     saveTrackedShot(shotPayload);
-    
     endTrackingShot();
     setSelectedClub('');
   };
