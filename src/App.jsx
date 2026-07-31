@@ -63,7 +63,6 @@ function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial check on load
     if (navigator.onLine) {
       setOnlineStatus(true);
     }
@@ -74,21 +73,28 @@ function App() {
     };
   }, [setOnlineStatus]);
 
-  // Native GPS Tracker (Optimized for active movement)
+  // Native GPS Tracker (Fixed Android Timeout Crashes)
   useEffect(() => {
-    let watchId;
+    let watchId = null;
+    
     const startNativeTracking = async () => {
       try {
         if (Capacitor.isNativePlatform()) {
           const permissions = await Geolocation.checkPermissions();
-          if (permissions.location !== 'granted') await Geolocation.requestPermissions();
+          if (permissions.location !== 'granted') {
+            await Geolocation.requestPermissions();
+          }
         }
 
+        // Adjusted options for Android hardware stability
+        // Removed the strict 2000ms timeout that caused silent failures. Added a 3000ms cache buffer.
         watchId = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 2000 },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 },
           (position, err) => {
             if (!err && position) {
               setLocation(position.coords.latitude, position.coords.longitude, position.coords.accuracy);
+            } else if (err) {
+              console.warn("GPS Polling Warning:", err);
             }
           }
         );
@@ -96,8 +102,16 @@ function App() {
         console.error("Geolocation init error:", error);
       }
     };
-    if (user) startNativeTracking();
-    return () => { if (watchId) Geolocation.clearWatch({ id: watchId }); };
+    
+    if (user) {
+      startNativeTracking();
+    }
+    
+    return () => { 
+      if (watchId !== null) {
+        Geolocation.clearWatch({ id: watchId }); 
+      }
+    };
   }, [user, setLocation]);
 
   // Hardware Compass Listener for Dynamic Wind Arrow

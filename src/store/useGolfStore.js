@@ -40,14 +40,14 @@ export const useGolfStore = create(
       },
 
       addToSyncQueue: (task) => set((state) => ({ 
-        syncQueue: [...state.syncQueue, { ...task, queueId: crypto.randomUUID(), timestamp: Date.now() }] 
+        // Add retries counter to track failed upload attempts
+        syncQueue: [...state.syncQueue, { ...task, queueId: crypto.randomUUID(), timestamp: Date.now(), retries: 0 }] 
       })),
 
       processSyncQueue: async () => {
         const state = get();
         if (!state.isOnline || state.syncQueue.length === 0) return;
 
-        // Create a copy of the queue to process
         const queueToProcess = [...state.syncQueue];
         const failedTasks = [];
 
@@ -65,11 +65,18 @@ export const useGolfStore = create(
             }
           } catch (err) {
             console.error("Background sync failed for task:", task, err);
-            failedTasks.push(task); // Keep failed tasks to retry later
+            
+            // 3-Strike Rule: If a task fails 3 times (e.g. database rejects it), delete it permanently
+            const retries = (task.retries || 0) + 1;
+            if (retries < 3) {
+              failedTasks.push({ ...task, retries });
+            } else {
+              console.warn("Task dropped permanently after 3 failed attempts to prevent infinite loops.");
+            }
           }
         }
         
-        // Update queue with only the tasks that failed
+        // Update queue with only the tasks that survived (didn't strike out)
         set({ syncQueue: failedTasks });
       },
       // --------------------------
@@ -113,14 +120,10 @@ export const useGolfStore = create(
       endTrackingShot: () => set({ activeShot: null, mapTarget: null }),
 
       saveTrackedShot: async (shotPayload) => {
-        // Optimistic Local Update (shows up in analytics immediately)
         const localShot = { ...shotPayload, id: crypto.randomUUID() };
         set(state => ({ shots: [...state.shots, localShot] }));
 
-        // Add to Sync Queue (Handles DB insert in background)
         get().addToSyncQueue({ type: 'INSERT_SHOT', payload: shotPayload });
-        
-        // Try processing immediately if online
         get().processSyncQueue();
       },
 
@@ -132,9 +135,16 @@ export const useGolfStore = create(
         
         try {
           const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m&elevation=nan`);
-          if (!res.ok) throw new Error(`Weather API returned status: ${res.status}`);
+          
+          if (!res.ok) {
+            throw new Error(`Weather API returned status: ${res.status}`);
+          }
+
           const data = await res.json();
-          if (!data || data.elevation === undefined) throw new Error("Invalid elevation data received");
+          
+          if (!data || data.elevation === undefined) {
+            throw new Error("Invalid elevation data received");
+          }
 
           const altitudeFeet = Math.round(data.elevation * 3.28084);
           
@@ -158,9 +168,16 @@ export const useGolfStore = create(
         
         try {
           const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${state.currentLat}&longitude=${state.currentLng}&current=temperature_2m,wind_speed_10m,wind_direction_10m&wind_speed_unit=mph`);
-          if (!res.ok) throw new Error(`Weather API returned status: ${res.status}`);
+          
+          if (!res.ok) {
+            throw new Error(`Weather API returned status: ${res.status}`);
+          }
+
           const data = await res.json();
-          if (!data || !data.current) throw new Error("Invalid weather data received");
+          
+          if (!data || !data.current) {
+            throw new Error("Invalid weather data received");
+          }
           
           set({
             windSpeed: Math.round(data.current.wind_speed_10m),
@@ -221,7 +238,6 @@ export const useGolfStore = create(
 
         const roundUpdateData = { total_score: total, scorecard: state.scores };
 
-        // Optimistic Local Update
         set((state) => ({
           rounds: state.rounds.map(r => 
             r.id === state.currentRoundId 
@@ -235,7 +251,6 @@ export const useGolfStore = create(
           mapTarget: null
         }));
 
-        // Add to Sync Queue
         get().addToSyncQueue({ 
           type: 'UPDATE_ROUND', 
           payload: { id: state.currentRoundId, data: roundUpdateData } 
@@ -255,7 +270,7 @@ export const useGolfStore = create(
         scores: state.scores, 
         userHandicap: state.userHandicap,
         greenElevations: state.greenElevations,
-        syncQueue: state.syncQueue // Ensure pending uploads survive app restarts
+        syncQueue: state.syncQueue 
       })
     }
   )
