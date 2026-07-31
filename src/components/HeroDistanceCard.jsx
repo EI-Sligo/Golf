@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useGolfStore } from '../store/useGolfStore';
 import { 
   calculateDistance, 
@@ -29,25 +29,38 @@ export default function HeroDistanceCard() {
     mapTarget,
     setMapTarget,
     recordGreenElevation,
-    scores // Brought in scores to calculate relative round score
+    scores,
+    // --- New Integrations ---
+    pinnedTip,
+    setPinnedTip,
+    rounds,
+    currentRoundId,
+    customPins
   } = useGolfStore();
 
+  const activeRound = rounds.find(r => r.id === currentRoundId);
+  const isDefaultCourse = activeRound?.course_name === 'Castle Dargan Golf Club' || activeRound?.course_name === 'Demo Analytics Data';
   const hole = courseData[activeHole];
   
-  const distCenter = (currentLat && hole?.pin) 
-    ? calculateDistance(currentLat, currentLng, hole.pin.lat, hole.pin.lng) 
+  // Custom Pin Logic: Use dragged pin if exists, otherwise default pin
+  const customPinKey = `${currentRoundId}_${activeHole}`;
+  const activePin = (customPins && customPins[customPinKey]) || (isDefaultCourse ? hole?.pin : null);
+
+  const distCenter = (currentLat && activePin) 
+    ? calculateDistance(currentLat, currentLng, activePin.lat, activePin.lng) 
     : 0;
     
-  const distFront = (currentLat && hole?.front) 
+  // Front and Back only show if on a default course (custom courses don't have predefined front/back)
+  const distFront = (currentLat && hole?.front && isDefaultCourse) 
     ? calculateDistance(currentLat, currentLng, hole.front.lat, hole.front.lng) 
-    : 0;
+    : '-';
     
-  const distBack = (currentLat && hole?.back) 
+  const distBack = (currentLat && hole?.back && isDefaultCourse) 
     ? calculateDistance(currentLat, currentLng, hole.back.lat, hole.back.lng) 
-    : 0;
+    : '-';
   
-  const targetLat = mapTarget ? mapTarget.lat : hole?.pin?.lat;
-  const targetLng = mapTarget ? mapTarget.lng : hole?.pin?.lng;
+  const targetLat = mapTarget ? mapTarget.lat : activePin?.lat;
+  const targetLng = mapTarget ? mapTarget.lng : activePin?.lng;
 
   const activeDistance = (currentLat && targetLat) 
     ? calculateDistance(currentLat, currentLng, targetLat, targetLng) 
@@ -61,6 +74,13 @@ export default function HeroDistanceCard() {
   const recommendedClub = getRecommendedClub(playsLike, clubs);
 
   const relativeWindArrow = windDir - deviceHeading;
+
+  // Auto-fetch weather when the component loads or hole changes
+  useEffect(() => {
+    if (currentLat && currentLng) {
+      fetchLiveConditions();
+    }
+  }, [activeHole, currentLat, currentLng, fetchLiveConditions]);
 
   // Calculate Relative Round Score (+2, -1, E) based on holes actually played
   let totalStrokes = 0;
@@ -85,6 +105,30 @@ export default function HeroDistanceCard() {
 
   return (
     <div className="space-y-4">
+      {/* Pinned Swing Thought */}
+      {pinnedTip && (
+        <div className="bg-sky-900/30 border border-sky-500/30 p-3.5 rounded-2xl relative">
+          <button 
+            onClick={() => setPinnedTip(null)}
+            className="absolute top-2 right-3 text-sky-400 hover:text-white font-bold text-lg leading-none"
+          >
+            ×
+          </button>
+          <div className="flex items-center gap-2 mb-2 pr-6">
+            <span className="text-base">{pinnedTip.icon}</span>
+            <h3 className="text-xs font-bold text-sky-400 uppercase tracking-wider">{pinnedTip.title}</h3>
+          </div>
+          <ul className="space-y-1">
+            {pinnedTip.content.slice(0, 3).map((bullet, idx) => (
+              <li key={idx} className="text-[11px] text-slate-300 flex items-start gap-1.5 leading-snug">
+                <span className="text-sky-500">•</span>
+                <span>{bullet}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="bg-slate-800 p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-700">
         
         {/* Header - Hole Navigation & Relative Score */}
@@ -126,8 +170,10 @@ export default function HeroDistanceCard() {
             <h3 className="text-xl sm:text-2xl font-bold text-white">{distFront}</h3>
           </div>
           <div className="text-center pb-1">
-            <p className="text-emerald-400 text-[9px] sm:text-[10px] uppercase font-bold tracking-widest mb-1">Center Pin</p>
-            <h2 className="text-4xl sm:text-5xl font-black text-white">{distCenter}</h2>
+            <p className="text-emerald-400 text-[9px] sm:text-[10px] uppercase font-bold tracking-widest mb-1">
+              {mapTarget ? 'Map Target' : 'Center Pin'}
+            </p>
+            <h2 className="text-4xl sm:text-5xl font-black text-white">{activeDistance}</h2>
           </div>
           <div className="text-center opacity-70">
             <p className="text-slate-400 text-[9px] sm:text-[10px] uppercase font-bold tracking-widest mb-1">Back</p>

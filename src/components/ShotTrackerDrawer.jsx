@@ -15,10 +15,17 @@ export default function ShotTrackerDrawer() {
     clubs, 
     currentRoundId, 
     activeHole, 
-    mapTarget 
+    mapTarget,
+    rounds,
+    customPins
   } = useGolfStore();
   
   const [selectedClub, setSelectedClub] = useState('');
+
+  const activeRound = rounds.find(r => r.id === currentRoundId);
+  const isDefaultCourse = activeRound?.course_name === 'Castle Dargan Golf Club' || activeRound?.course_name === 'Demo Analytics Data';
+  const customPinKey = `${currentRoundId}_${activeHole}`;
+  const activePin = (customPins && customPins[customPinKey]) || (isDefaultCourse ? courseData[activeHole]?.pin : null);
 
   const liveDistance = (activeShot && currentLat)
     ? calculateDistance(activeShot.startLat, activeShot.startLng, currentLat, currentLng)
@@ -28,9 +35,8 @@ export default function ShotTrackerDrawer() {
     if (!selectedClub) return alert('Please select a club to track.');
     if (!currentLat) return alert('Waiting for GPS lock...');
 
-    const hole = courseData[activeHole];
-    const targetLat = mapTarget ? mapTarget.lat : hole?.pin?.lat;
-    const targetLng = mapTarget ? mapTarget.lng : hole?.pin?.lng;
+    const targetLat = mapTarget ? mapTarget.lat : activePin?.lat;
+    const targetLng = mapTarget ? mapTarget.lng : activePin?.lng;
 
     startTrackingShot({
       startLat: currentLat,
@@ -46,7 +52,6 @@ export default function ShotTrackerDrawer() {
     const selectedClubObj = clubs.find(c => c.id === activeShot.club_id);
     const clubName = selectedClubObj ? selectedClubObj.name : 'Unknown Club';
 
-    // Calculate accuracy tag on the fly to satisfy DB constraint
     let accuracyTag = 'Straight';
     if (activeShot.targetLat && activeShot.targetLng) {
       const dev = calculateDispersion(
@@ -71,7 +76,7 @@ export default function ShotTrackerDrawer() {
       lat: currentLat,
       lng: currentLng,
       distance: liveDistance,
-      accuracy: accuracyTag // FIXED
+      accuracy: accuracyTag
     };
 
     saveTrackedShot(shotPayload);

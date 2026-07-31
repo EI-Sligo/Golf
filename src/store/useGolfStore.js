@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
 
+// Helper for generating realistic GPS mock data
 const R_YARDS = 6967420; 
 const yardsToLatDeg = (yards) => (yards / R_YARDS) * (180 / Math.PI);
 const yardsToLngDeg = (yards, lat) => (yards / (R_YARDS * Math.cos(lat * Math.PI / 180))) * (180 / Math.PI);
@@ -12,7 +13,7 @@ export const useGolfStore = create(
       activeHole: 1,
       scores: {}, 
       isScoreModalOpen: false,
-      userHandicap: 18,
+      userHandicap: 36,
       
       currentLat: null,
       currentLng: null,
@@ -33,6 +34,21 @@ export const useGolfStore = create(
       shots: [],
       mapTarget: null,
       activeShot: null,
+
+      // --- New UI States ---
+      pinnedTip: null,
+      planningClubId: '', 
+      setPlanningClubId: (id) => set({ planningClubId: id }),
+      setPinnedTip: (tip) => set({ pinnedTip: tip }), 
+
+      // --- Custom Course Pin Storage ---
+      customPins: {}, 
+      setCustomPin: (roundId, hole, lat, lng) => set((state) => ({
+        customPins: {
+          ...state.customPins,
+          [`${roundId}_${hole}`]: { lat, lng }
+        }
+      })),
 
       // --- Offline Sync State ---
       isOnline: navigator.onLine,
@@ -126,6 +142,7 @@ export const useGolfStore = create(
         get().processSyncQueue();
       },
 
+      // RESTORED: Green Elevation API
       recordGreenElevation: async () => {
         const state = get();
         if (!state.currentLat) {
@@ -150,11 +167,10 @@ export const useGolfStore = create(
         }
       },
 
+      // RESTORED: Weather API
       fetchLiveConditions: async () => {
         const state = get();
-        if (!state.currentLat) {
-          return alert("Waiting for GPS signal...");
-        }
+        if (!state.currentLat) return;
         
         set({ isFetchingWeather: true });
         
@@ -200,8 +216,6 @@ export const useGolfStore = create(
         const { data, error } = await supabase.from('clubs').insert([newClub]).select();
         if (!error && data) {
           set(state => ({ clubs: [...state.clubs, data[0]] }));
-        } else {
-          alert("Failed to add club. Make sure you are online.");
         }
       },
 
@@ -212,6 +226,7 @@ export const useGolfStore = create(
         }
       },
 
+      // RESTORED: Ben Hogan Demo Data Engine
       seedBenHoganWithMockData: async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -306,7 +321,6 @@ export const useGolfStore = create(
               const finalLat = baseLat + yardsToLatDeg(actualDist);
               const finalLng = baseLng + yardsToLngDeg(pattern.disp, baseLat);
               
-              // Add the previously missing accuracy string so DB doesn't reject it
               const accuracyTag = pattern.disp < -7 ? 'Left' : (pattern.disp > 7 ? 'Right' : 'Straight');
 
               mockShotsPayload.push({
@@ -322,16 +336,13 @@ export const useGolfStore = create(
                 lat: finalLat,
                 lng: finalLng,
                 distance: actualDist,
-                accuracy: accuracyTag // FIXED: Prevents NOT NULL constraint error
+                accuracy: accuracyTag 
               });
             });
           });
 
           const { error: shotErr } = await supabase.from('shots').insert(mockShotsPayload);
-          if (shotErr) {
-            console.error("Shot insert error:", shotErr);
-            alert("Shots failed to save: " + shotErr.message);
-          }
+          if (shotErr) console.error("Shot insert error:", shotErr);
         }
         
         await get().fetchInitialData(user.id);
@@ -404,7 +415,9 @@ export const useGolfStore = create(
         scores: state.scores, 
         userHandicap: state.userHandicap,
         greenElevations: state.greenElevations,
-        syncQueue: state.syncQueue 
+        syncQueue: state.syncQueue,
+        pinnedTip: state.pinnedTip,
+        customPins: state.customPins 
       })
     }
   )

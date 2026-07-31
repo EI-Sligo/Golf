@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useGolfStore } from '../store/useGolfStore';
 import { courseData } from '../lib/courseData';
-import { calculateDispersion } from '../lib/golfMath';
+import { calculateDispersion, getNetScore } from '../lib/golfMath';
 
 export default function RoundHistory() {
-  const { rounds, shots, deleteRound } = useGolfStore();
+  const { rounds, shots, deleteRound, userHandicap } = useGolfStore();
   const [selectedRound, setSelectedRound] = useState(null);
 
   if (!rounds || rounds.length === 0) {
@@ -17,7 +17,6 @@ export default function RoundHistory() {
     );
   }
 
-  // Find specific shots for the opened modal
   const roundShots = selectedRound ? shots.filter(s => s.round_id === selectedRound.id) : [];
 
   return (
@@ -29,12 +28,29 @@ export default function RoundHistory() {
         const holesPlayed = Object.keys(scorecard).length;
         
         let totalStrokes = 0;
+        let totalNetStrokes = 0;
         let totalPutts = 0;
+        let totalPar = 0; // NEW: Track par for holes actually played
         
-        Object.values(scorecard).forEach(hole => {
-          totalStrokes += (hole.strokes || 0);
-          totalPutts += (hole.putts || 0);
+        Object.entries(scorecard).forEach(([holeNum, data]) => {
+          const strokes = data.strokes || 0;
+          totalStrokes += strokes;
+          totalPutts += (data.putts || 0);
+          
+          const holePar = courseData[holeNum]?.par || 4;
+          totalPar += holePar;
+          
+          const strokeIndex = courseData[holeNum]?.strokeIndex || 18;
+          totalNetStrokes += getNetScore(strokes, strokeIndex, userHandicap);
         });
+
+        // Calculate Overall Relative Score (+6, E, -2)
+        const relativeScore = totalStrokes - totalPar;
+        let relativeStr = 'E';
+        if (totalStrokes > 0) {
+          relativeStr = relativeScore > 0 ? `+${relativeScore}` : relativeScore === 0 ? 'E' : `${relativeScore}`;
+        }
+        const relativeColor = relativeScore > 0 ? 'text-rose-400' : relativeScore < 0 ? 'text-sky-400' : 'text-emerald-400';
 
         const dateObj = new Date(round.created_at);
         const formattedDate = dateObj.toLocaleDateString('en-US', {
@@ -49,14 +65,28 @@ export default function RoundHistory() {
           >
             <div className="p-4 border-b border-slate-700 flex justify-between items-start bg-slate-800/50">
               <div>
-                <h3 className="text-lg font-bold text-white">{round.course_name || 'Unknown Course'}</h3>
+                <h3 className="text-lg font-bold text-white truncate max-w-[170px]">{round.course_name || 'Unknown Course'}</h3>
                 <p className="text-xs text-slate-400 font-semibold">{formattedDate}</p>
               </div>
-              <div className="text-right">
-                <span className="text-2xl font-black text-emerald-400 leading-none">
-                  {totalStrokes > 0 ? totalStrokes : '-'}
-                </span>
-                <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Total</p>
+              
+              <div className="flex gap-4">
+                <div className="text-right flex flex-col items-end">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-black text-emerald-400 leading-none">
+                      {totalStrokes > 0 ? totalStrokes : '-'}
+                    </span>
+                    {totalStrokes > 0 && (
+                      <span className={`text-xs font-bold ${relativeColor}`}>({relativeStr})</span>
+                    )}
+                  </div>
+                  <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider mt-0.5">Gross</p>
+                </div>
+                <div className="text-right border-l border-slate-700 pl-4">
+                  <span className="text-2xl font-black text-sky-400 leading-none">
+                    {totalNetStrokes > 0 ? totalNetStrokes : '-'}
+                  </span>
+                  <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider mt-0.5">Net</p>
+                </div>
               </div>
             </div>
 
@@ -67,7 +97,7 @@ export default function RoundHistory() {
               </div>
               <div className="p-3 text-center">
                 <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Putts</p>
-                <p className="text-lg font-bold text-sky-400">{totalPutts}</p>
+                <p className="text-lg font-bold text-slate-200">{totalPutts}</p>
               </div>
               <div className="p-3 text-center">
                 <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Status</p>
@@ -81,14 +111,14 @@ export default function RoundHistory() {
               <span className="text-xs text-emerald-400 font-bold ml-2">Tap to view scorecard</span>
               <button 
                 onClick={(e) => {
-                  e.stopPropagation(); // Prevents the modal from opening when clicking delete
+                  e.stopPropagation(); 
                   if (window.confirm("Delete this round permanently?")) {
                     deleteRound(round.id);
                   }
                 }}
                 className="text-xs font-bold text-rose-400 bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/20 hover:bg-rose-500/20 transition-colors"
               >
-                Delete Round
+                Delete
               </button>
             </div>
           </div>
@@ -100,7 +130,6 @@ export default function RoundHistory() {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-3 backdrop-blur-sm overflow-hidden">
           <div className="w-full max-w-md h-[85vh] bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl flex flex-col">
             
-            {/* Modal Header */}
             <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900 shrink-0 rounded-t-2xl">
               <div>
                 <h3 className="text-lg font-black text-emerald-400 truncate max-w-[200px]">{selectedRound.course_name}</h3>
@@ -111,7 +140,6 @@ export default function RoundHistory() {
               </button>
             </div>
 
-            {/* Scrollable Content */}
             <div className="overflow-y-auto p-4 space-y-6 flex-1">
               
               {/* Scorecard Table */}
@@ -125,6 +153,9 @@ export default function RoundHistory() {
                       {Object.entries(selectedRound.scorecard).map(([holeNum, data]) => {
                         const par = courseData[holeNum]?.par || 4;
                         const relative = data.strokes - par;
+                        
+                        // NEW: Calculate specific hole string and color
+                        const relativeStr = relative > 0 ? `+${relative}` : relative === 0 ? 'E' : `${relative}`;
                         const scoreColor = relative < 0 ? 'text-sky-400' : relative > 0 ? 'text-rose-400' : 'text-emerald-400';
                         
                         return (
@@ -133,9 +164,12 @@ export default function RoundHistory() {
                               <p className="text-[9px] text-slate-500 font-bold uppercase">Hole</p>
                               <p className="font-black text-white">{holeNum}</p>
                             </div>
-                            <div className="w-12 text-center shrink-0 border-l border-slate-700 pl-2">
+                            <div className="w-16 text-center shrink-0 border-l border-slate-700 pl-2">
                               <p className="text-[9px] text-slate-500 font-bold uppercase">Score</p>
-                              <p className={`font-black ${scoreColor}`}>{data.strokes}</p>
+                              <div className="flex items-baseline justify-center gap-1">
+                                <p className="font-black text-white text-base">{data.strokes}</p>
+                                <p className={`text-[10px] font-bold ${scoreColor}`}>({relativeStr})</p>
+                              </div>
                             </div>
                             <div className="flex-1 border-l border-slate-700 pl-3">
                               <p className="text-xs text-white font-semibold truncate">
@@ -166,7 +200,7 @@ export default function RoundHistory() {
                       let devStr = 'Straight';
                       let devColor = 'text-emerald-400';
                       
-                      if (shot.target_lat && shot.target_lng) {
+                      if (shot.target_lat && shot.target_lng && shot.start_lat && shot.start_lng && shot.lat && shot.lng) {
                          const devYards = calculateDispersion(shot.start_lat, shot.start_lng, shot.target_lat, shot.target_lng, shot.lat, shot.lng);
                          if (devYards < -7) { devStr = `${Math.abs(devYards)}y L`; devColor = 'text-sky-400'; }
                          else if (devYards > 7) { devStr = `${devYards}y R`; devColor = 'text-amber-400'; }

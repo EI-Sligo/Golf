@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useGolfStore } from '../store/useGolfStore';
 
 export default function SwingThoughtsRules() {
   const [activeTab, setActiveTab] = useState('shots');
   const [openAccordion, setOpenAccordion] = useState(null);
+  const { pinnedTip, setPinnedTip } = useGolfStore();
 
   const toggleAccordion = (index) => {
     if (openAccordion === index) setOpenAccordion(null);
@@ -68,30 +70,30 @@ export default function SwingThoughtsRules() {
 
   const rulesGuide = [
     {
-      title: "Lost Ball or Out of Bounds (White Stakes)",
+      title: "Lost Ball or Out of Bounds",
       icon: "🏳️",
       content: [
         "You have exactly 3 minutes to search for a lost ball.",
-        "If lost or Out of Bounds (past white stakes), it is a Stroke and Distance penalty.",
-        "You must add 1 penalty stroke and play from where you hit your previous shot.",
-        "Alternative (Local Rule if active): Drop a ball on the edge of the fairway no closer to the hole, adding 2 penalty strokes."
+        "If lost or Out of Bounds, it is a Stroke and Distance penalty.",
+        "Add 1 penalty stroke and play from where you hit your previous shot.",
+        "Local Rule Alternative: Drop a ball on the edge of the fairway no closer to the hole, adding 2 penalty strokes."
       ]
     },
     {
-      title: "Penalty Areas (Red & Yellow Stakes/Lines)",
+      title: "Penalty Areas (Red & Yellow)",
       icon: "💧",
       content: [
-        "Yellow: You can play it as it lies (no penalty), or take 1 penalty stroke and drop on a line keeping the point it crossed the hazard between you and the hole.",
-        "Red: Same options as Yellow, PLUS you can drop within two club-lengths from where the ball crossed the margin of the hazard, no closer to the hole (1 penalty stroke)."
+        "Yellow: Play it as it lies (no penalty), or take 1 penalty stroke and drop on a line keeping the point it crossed between you and the hole.",
+        "Red: Same as Yellow, PLUS you can drop within two club-lengths from where the ball crossed the margin, no closer to the hole (1 penalty stroke)."
       ]
     },
     {
       title: "Unplayable Lie",
       icon: "🌳",
       content: [
-        "If your ball is in a bush or against a tree, you can declare it unplayable (1 penalty stroke).",
+        "If your ball is in a bush/tree, declare it unplayable (1 penalty stroke).",
         "Option 1: Drop within two club-lengths, no closer to the hole.",
-        "Option 2: Go back as far as you want on a straight line keeping the unplayable spot between you and the hole.",
+        "Option 2: Go back on a straight line keeping the spot between you and the hole.",
         "Option 3: Return to the spot of your previous shot."
       ]
     },
@@ -99,18 +101,9 @@ export default function SwingThoughtsRules() {
       title: "Dropping Procedure",
       icon: "⬇️",
       content: [
-        "When taking relief, you must drop the ball from knee height.",
+        "You must drop the ball from knee height.",
         "The ball must fall straight down without you throwing, spinning, or rolling it.",
         "It must land in and come to rest within the designated relief area."
-      ]
-    },
-    {
-      title: "Provisional Ball",
-      icon: "⛳",
-      content: [
-        "If you think your ball might be lost (outside a penalty area) or Out of Bounds, play a Provisional Ball to save time.",
-        "You MUST announce it clearly: 'I am playing a provisional.'",
-        "If you find your first ball in bounds, pick up the provisional. If you can't find the first ball, the provisional becomes your ball in play (adding the penalty stroke)."
       ]
     }
   ];
@@ -120,19 +113,19 @@ export default function SwingThoughtsRules() {
       title: "Ready Golf & Pace of Play",
       icon: "⏱️",
       content: [
-        "Unless playing a strict formal tournament, play 'Ready Golf'. Whoever is ready to hit safely should hit, regardless of who is furthest away.",
-        "Be ready to hit when it is your turn. Plan your shot and pick your club while others are hitting.",
+        "Play 'Ready Golf'. Whoever is ready to hit safely should hit.",
+        "Plan your shot and pick your club while others are hitting.",
         "Leave your bag on the side of the green closest to the next tee box.",
-        "If your group falls more than a hole behind the group in front, allow faster groups behind you to play through."
+        "If your group falls more than a hole behind, let faster groups play through."
       ]
     },
     {
       title: "Course Care",
       icon: "🌱",
       content: [
-        "Always carry a pitch mark repairer. Repair your pitch mark on the green, plus one other.",
-        "Replace your divots on the fairway (or fill them with sand/seed if provided on the cart).",
-        "Rake bunkers after use. Leave the rake outside the bunker or as directed by local rules.",
+        "Repair your pitch mark on the green, plus one other.",
+        "Replace your divots on the fairway or fill them with sand/seed.",
+        "Rake bunkers after use.",
         "Avoid taking practice swings that take a divot on the tee boxes."
       ]
     },
@@ -140,15 +133,15 @@ export default function SwingThoughtsRules() {
       title: "Safety & Consideration",
       icon: "⚠️",
       content: [
-        "If you hit a ball that is heading toward another person or group, immediately yell 'FORE!' as loudly as possible.",
-        "Never stand directly behind someone's line of play or in their peripheral vision while they are swinging.",
-        "Do not talk, move, or make noise when someone is addressing their ball.",
-        "On the green, avoid stepping on the 'line' between another player's ball and the hole."
+        "If a ball is heading toward someone, yell 'FORE!' as loudly as possible.",
+        "Never stand directly behind someone's line of play while they swing.",
+        "Do not talk or move when someone is addressing their ball.",
+        "Avoid stepping on the 'line' between another player's ball and the hole."
       ]
     }
   ];
 
-  const renderAccordion = (dataArray) => {
+  const renderAccordion = (dataArray, showPinButton = false) => {
     return (
       <div className="space-y-3">
         {dataArray.map((item, index) => (
@@ -166,11 +159,9 @@ export default function SwingThoughtsRules() {
               </span>
             </button>
             
-            <div 
-              className={`transition-all duration-300 ease-in-out ${openAccordion === index ? 'max-h-96 border-t border-slate-800' : 'max-h-0'}`}
-            >
+            <div className={`transition-all duration-300 ease-in-out ${openAccordion === index ? 'max-h-[500px] border-t border-slate-800 opacity-100' : 'max-h-0 opacity-0'}`}>
               <div className="p-4 bg-slate-900/50">
-                <ul className="space-y-2">
+                <ul className="space-y-2 mb-4">
                   {item.content.map((bullet, idx) => (
                     <li key={idx} className="text-sm text-slate-400 flex items-start gap-2">
                       <span className="text-emerald-500 mt-0.5">•</span>
@@ -178,6 +169,14 @@ export default function SwingThoughtsRules() {
                     </li>
                   ))}
                 </ul>
+                {showPinButton && (
+                  <button 
+                    onClick={() => setPinnedTip(item)}
+                    className={`w-full py-2.5 rounded-lg text-xs font-bold transition-colors ${pinnedTip?.title === item.title ? 'bg-emerald-500 text-slate-900' : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'}`}
+                  >
+                    {pinnedTip?.title === item.title ? '📍 Pinned to Scorecard' : '📌 Pin to Scorecard'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -193,7 +192,6 @@ export default function SwingThoughtsRules() {
         <p className="text-xs text-slate-400 mt-1">Quick reference for rules, shots, and course survival.</p>
       </div>
 
-      {/* Navigation Tabs */}
       <div className="flex bg-slate-800 rounded-xl p-1.5 border border-slate-700 shadow-sm">
         <button 
           onClick={() => { setActiveTab('shots'); setOpenAccordion(null); }} 
@@ -215,14 +213,12 @@ export default function SwingThoughtsRules() {
         </button>
       </div>
 
-      {/* Tab Content */}
       <div className="pt-2">
-        {activeTab === 'shots' && renderAccordion(shotGuide)}
-        {activeTab === 'rules' && renderAccordion(rulesGuide)}
-        {activeTab === 'etiquette' && renderAccordion(etiquetteGuide)}
+        {activeTab === 'shots' && renderAccordion(shotGuide, true)}
+        {activeTab === 'rules' && renderAccordion(rulesGuide, false)}
+        {activeTab === 'etiquette' && renderAccordion(etiquetteGuide, false)}
       </div>
 
-      {/* Quick Mental Check */}
       <div className="mt-6 bg-purple-900/20 border border-purple-500/30 p-4 rounded-xl">
         <h3 className="text-sm font-bold text-purple-400 uppercase tracking-wider mb-2 flex items-center gap-2">
           <span>🧠</span> Pre-Shot Routine
@@ -237,7 +233,6 @@ export default function SwingThoughtsRules() {
           <li><strong className="text-slate-200">Trust It:</strong> Look at the target, look at the ball, swing.</li>
         </ol>
       </div>
-
     </div>
   );
 }
